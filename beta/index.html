@@ -143,6 +143,8 @@ svg{display:block;flex:none}
 .rail-b svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.7}
 
 /* guidage */
+/* pendant le détourage, la barre occupe le bas : le bandeau monte */
+#stage:has(#cutbar[style*="flex"]) #hint{top:16%}
 #hint{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:15;
   max-width:78%;padding:13px 20px;border-radius:var(--r-l);text-align:center;
   background:rgba(16,13,11,.82);border:1px solid var(--line);
@@ -477,6 +479,7 @@ input[type=file]{display:none}
 
       <div id="cutbar">
         <button data-cut="auto">Fond auto</button>
+        <button data-cut="uni">Fond uni</button>
         <button data-cut="reset">Tout garder</button>
         <label>Tolérance<input type="range" id="tol" min="12" max="110" step="1" value="46"></label>
         <button data-cut="ok" class="go">Valider</button>
@@ -1112,7 +1115,9 @@ function drawCut(){
     ctx.fillRect(x,y,s,s);
   }
   ctx.drawImage(cut.work,0,0);
-  setHint('Touchez le fond à effacer, puis Valider', '0');
+  // ce message était posé puis masqué aussitôt : personne ne l'a jamais lu,
+  // alors que c'est la seule explication du détourage manuel
+  setHint('Touchez les zones de fond restantes, puis Valider', '1');
 }
 
 async function autoCut(){
@@ -1144,32 +1149,111 @@ async function autoCut(){
     cm.close();
   }catch(e){ /* pas de segmenteur : on remplit depuis les coins */ }
 
-  if(!done) for(const [x,y] of [[0,0],[w-1,0],[0,h-1],[w-1,h-1]]) floodAt(x,y);
+  /* Le segmenteur est entraîné sur des selfies : devant une robe posée à
+     plat ou sur cintre, il rend un masque approximatif qui laisse du fond.
+     On enchaîne donc toujours par le pourtour, qui lui ne suppose rien, puis
+     on ronge le liseré. */
+  floodSeeds(borderSeeds(w,h));
+  erodeAlpha(cut.work, 2);
   drawCut();
 }
 
-// efface la région connexe de couleur voisine, depuis un point
-function floodAt(sx,sy){
+/* Efface les régions connexes de couleur voisine, depuis plusieurs points
+   de départ. Un seul getImageData pour tous : la version précédente relisait
+   et réécrivait le bitmap entier à chaque point, ce qui interdisait de partir
+   de tout le pourtour de l'image. */
+function floodSeeds(seeds){
   const c = cut.work, w = c.width, h = c.height;
   const g = c.getContext('2d',{ willReadFrequently:true });
   const d = g.getImageData(0,0,w,h), p = d.data;
-  const s0 = sy*w + sx;
-  if(p[s0*4+3] === 0) return;
-  const r0 = p[s0*4], g0 = p[s0*4+1], b0 = p[s0*4+2];
   const t = +$('tol').value, tol = t*t*3;
   const seen = new Uint8Array(w*h);
-  const stack = [s0];
-  while(stack.length){
-    const i = stack.pop();
-    if(seen[i]) continue;
-    const dr = p[i*4]-r0, dg = p[i*4+1]-g0, db = p[i*4+2]-b0;
-    if(p[i*4+3] === 0 || dr*dr+dg*dg+db*db > tol) continue;
-    seen[i] = 1; p[i*4+3] = 0;
-    const x = i%w, y = (i/w)|0;
-    if(x>0)   stack.push(i-1);
-    if(x<w-1) stack.push(i+1);
-    if(y>0)   stack.push(i-w);
-    if(y<h-1) stack.push(i+w);
+  const stack = [];
+  for(const [sx,sy] of seeds){
+    const s0 = sy*w + sx;
+    if(seen[s0] || p[s0*4+3] === 0) continue;
+    const r0 = p[s0*4], g0 = p[s0*4+1], b0 = p[s0*4+2];
+    stack.length = 0; stack.push(s0);
+    while(stack.length){
+      const i = stack.pop();
+      if(seen[i]) continue;
+      const dr = p[i*4]-r0, dg = p[i*4+1]-g0, db = p[i*4+2]-b0;
+      if(p[i*4+3] === 0 || dr*dr+dg*dg+db*db > tol) continue;
+      seen[i] = 1; p[i*4+3] = 0;
+      const x = i%w, y = (i/w)|0;
+      if(x>0)   stack.push(i-1);
+      if(x<w-1) stack.push(i+1);
+      if(y>0)   stack.push(i-w);
+      if(y<h-1) stack.push(i+w);
+    }
+  }
+  g.putImageData(d,0,0);
+}
+const floodAt = (x,y) => floodSeeds([[x,y]]);
+
+// tout le pourtour, pas seulement les quatre coins : un fond qui touche
+// un bord quelque part est un fond, où que ce soit
+function borderSeeds(w,h){
+  const s = [], step = Math.max(1, Math.round(Math.min(w,h)/80));
+  for(let x=0;x<w;x+=step){ s.push([x,0]); s.push([x,h-1]); }
+  for(let y=0;y<h;y+=step){ s.push([0,y]); s.push([w-1,y]); }
+  return s;
+}
+
+/* Le halo. Un pixel de bord est à moitié fond, à moitié tissu : il garde
+   donc la couleur du fond et dessine un liseré clair tout autour du
+   vêtement. On ronge le contour de quelques pixels, ce qui les supprime. */
+function erodeAlpha(cv, r){
+  const w = cv.width, h = cv.height;
+  const g = cv.getContext('2d',{ willReadFrequently:true });
+  const d = g.getImageData(0,0,w,h), p = d.data;
+  const n = w*h, a0 = new Uint8Array(n), tmp = new Uint8Array(n);
+  for(let i=0;i<n;i++) a0[i] = p[i*4+3];
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+    let m = 255;
+    for(let k=-r;k<=r;k++){
+      const xx = x+k;
+      const v = (xx<0||xx>=w) ? 0 : a0[y*w+xx];
+      if(v < m) m = v;
+    }
+    tmp[y*w+x] = m;
+  }
+  for(let x=0;x<w;x++) for(let y=0;y<h;y++){
+    let m = 255;
+    for(let k=-r;k<=r;k++){
+      const yy = y+k;
+      const v = (yy<0||yy>=h) ? 0 : tmp[yy*w+x];
+      if(v < m) m = v;
+    }
+    p[(y*w+x)*4+3] = m < a0[y*w+x] ? m : a0[y*w+x];
+  }
+  g.putImageData(d,0,0);
+}
+
+/* Un fond enfermé — entre le bras et le buste, sous une bretelle — ne touche
+   aucun bord, donc aucun remplissage ne l'atteint. Sur un fond uni on peut
+   l'effacer par la couleur, où qu'il se trouve. Réservé à un bouton : sur un
+   vêtement clair, ça mordrait dans le tissu. */
+function keyBackground(){
+  const c = cut.work, w = c.width, h = c.height;
+  const g = c.getContext('2d',{ willReadFrequently:true });
+  const d = g.getImageData(0,0,w,h), p = d.data;
+  /* La couleur du fond se lit sur la photo d'ORIGINE. La lire sur l'image de
+     travail ne donnait rien : son pourtour vient précisément d'être effacé,
+     il n'y restait donc plus un seul pixel de fond à échantillonner. */
+  const q = cut.orig.getContext('2d',{ willReadFrequently:true })
+                    .getImageData(0,0,w,h).data;
+  let sr=0, sg=0, sb=0, n=0;
+  const note = i => { sr+=q[i*4]; sg+=q[i*4+1]; sb+=q[i*4+2]; n++; };
+  for(let x=0;x<w;x++){ note(x); note((h-1)*w+x); }
+  for(let y=0;y<h;y++){ note(y*w); note(y*w+w-1); }
+  if(!n) return;
+  const r0=sr/n, g0=sg/n, b0=sb/n;
+  const t = +$('tol').value, tol = t*t*3;
+  for(let i=0;i<w*h;i++){
+    if(p[i*4+3] === 0) continue;
+    const dr=p[i*4]-r0, dg=p[i*4+1]-g0, db=p[i*4+2]-b0;
+    if(dr*dr+dg*dg+db*db <= tol) p[i*4+3] = 0;
   }
   g.putImageData(d,0,0);
 }
@@ -1178,6 +1262,7 @@ for(const b of document.querySelectorAll('#cutbar button')){
   b.onclick = ()=>{
     const a = b.dataset.cut;
     if(a === 'auto')  autoCut();
+    if(a === 'uni'){ keyBackground(); erodeAlpha(cut.work, 1); drawCut(); }
     if(a === 'reset'){ cut.work = copyCv(cut.orig); drawCut(); }
     if(a === 'ok'){
       $('cutbar').style.display = 'none';
