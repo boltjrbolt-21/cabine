@@ -9,37 +9,53 @@ export class FilesetResolver {
 
 let phase = 0;
 
-// 33 points, dans la convention MediaPipe Pose, coordonnées normalisées
+/* Rotation du buste, en degrés : 0 de face, 90 de profil, 180 de dos.
+   Poser window.__yaw la pilote depuis un test ; sinon elle balaie seule. */
+export function currentYaw(){
+  return (typeof window !== 'undefined' && window.__yaw !== undefined)
+    ? window.__yaw
+    : (Math.sin(phase * 0.35) * 0.5 + 0.5) * 180;
+}
+
+/* 33 points, convention MediaPipe Pose, coordonnées normalisées.
+   Le repère 11 est l'épaule GAUCHE de la personne : filmée de face et sans
+   miroir, elle apparaît donc à DROITE de l'image, donc à un x plus grand.
+   Se tromper ici inverse l'avant et l'arrière, et le test valide un moteur
+   cassé — c'est arrivé. */
 function pose(){
   phase += 0.02;
   const sway = Math.sin(phase) * 0.03;
   const armUp = (Math.sin(phase * 0.7) + 1) / 2;      // 0 bras bas, 1 bras levés
   const P = new Array(33).fill(null).map(()=>({ x:0.5, y:0.5, z:0, visibility:0.95 }));
 
+  // de profil, les épaules se rapprochent à l'écran ; de dos, elles se croisent
+  const w = Math.cos(currentYaw() * Math.PI / 180);
   const cx = 0.5 + sway;
-  P[0]  = { x:cx,        y:0.13, z:0, visibility:.98 };  // nez
-  P[11] = { x:cx-0.115,  y:0.29, z:0, visibility:.97 };  // épaule gauche
-  P[12] = { x:cx+0.115,  y:0.29, z:0, visibility:.97 };  // épaule droite
-  P[13] = { x:cx-0.175,  y:0.29 + 0.14*(1-armUp*0.7), z:0, visibility:.93 };
-  P[14] = { x:cx+0.175,  y:0.29 + 0.14*(1-armUp*0.7), z:0, visibility:.93 };
-  P[15] = { x:cx-0.205,  y:0.29 + 0.27*(1-armUp*0.8), z:0, visibility:.88 };
-  P[16] = { x:cx+0.205,  y:0.29 + 0.27*(1-armUp*0.8), z:0, visibility:.88 };
-  P[23] = { x:cx-0.075,  y:0.585, z:0, visibility:.95 }; // hanche gauche
-  P[24] = { x:cx+0.075,  y:0.585, z:0, visibility:.95 };
-  P[25] = { x:cx-0.072,  y:0.75,  z:0, visibility:.9 };
-  P[26] = { x:cx+0.072,  y:0.75,  z:0, visibility:.9 };
-  P[27] = { x:cx-0.07,   y:0.92,  z:0, visibility:.85 }; // chevilles visibles
-  P[28] = { x:cx+0.07,   y:0.92,  z:0, visibility:.85 };
+  P[0]  = { x:cx,          y:0.13, z:0, visibility:.98 };  // nez
+  P[11] = { x:cx+0.115*w,  y:0.29, z:0, visibility:.97 };  // épaule gauche
+  P[12] = { x:cx-0.115*w,  y:0.29, z:0, visibility:.97 };  // épaule droite
+  P[13] = { x:cx+0.175*w,  y:0.29 + 0.14*(1-armUp*0.7), z:0, visibility:.93 };
+  P[14] = { x:cx-0.175*w,  y:0.29 + 0.14*(1-armUp*0.7), z:0, visibility:.93 };
+  P[15] = { x:cx+0.205*w,  y:0.29 + 0.27*(1-armUp*0.8), z:0, visibility:.88 };
+  P[16] = { x:cx-0.205*w,  y:0.29 + 0.27*(1-armUp*0.8), z:0, visibility:.88 };
+  P[23] = { x:cx+0.075*w,  y:0.585, z:0, visibility:.95 }; // hanche gauche
+  P[24] = { x:cx-0.075*w,  y:0.585, z:0, visibility:.95 };
+  P[25] = { x:cx+0.072*w,  y:0.75,  z:0, visibility:.9 };
+  P[26] = { x:cx-0.072*w,  y:0.75,  z:0, visibility:.9 };
+  P[27] = { x:cx+0.07*w,   y:0.92,  z:0, visibility:.85 }; // chevilles visibles
+  P[28] = { x:cx-0.07*w,   y:0.92,  z:0, visibility:.85 };
   return P;
 }
 
-// repères 3D : servent uniquement au calcul de la rotation du buste
+/* Repères 3D. Seule la ligne d'épaules compte pour la rotation du buste.
+   MediaPipe : x suit l'image vers la droite, z est la profondeur, et plus
+   il est petit plus le point est proche de la caméra. */
 function world(){
-  const yaw = Math.sin(phase * 0.35) * 0.9;            // balaie face → profil
+  const th = currentYaw() * Math.PI / 180, r = 0.18;
   return [
     ...new Array(11).fill({ x:0, y:0, z:0, visibility:.9 }),
-    { x:-0.18*Math.cos(yaw), y:0, z:-0.18*Math.sin(yaw), visibility:.95 },
-    { x: 0.18*Math.cos(yaw), y:0, z: 0.18*Math.sin(yaw), visibility:.95 },
+    { x: r*Math.cos(th), y:0, z: r*Math.sin(th), visibility:.95 },  // épaule gauche
+    { x:-r*Math.cos(th), y:0, z:-r*Math.sin(th), visibility:.95 },  // épaule droite
     ...new Array(21).fill({ x:0, y:0, z:0, visibility:.9 })
   ];
 }
