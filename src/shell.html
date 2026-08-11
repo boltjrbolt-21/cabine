@@ -724,8 +724,15 @@ input[type=file]{display:none}
       <div id="rotHead"><span id="rotBand">—</span><b id="rotDeg">0°</b></div>
       <div id="rotBar"><i id="rotFill"></i><u id="rotMarkA"></u><u id="rotMarkB"></u></div>
       <div id="rotLegend"><span>Face</span><span>Profil</span><span>Dos</span></div>
-      <p id="rotNote">Tournez-vous devant la caméra : l'angle mesuré doit bouger.
-        S'il reste bloqué, forcez la vue ci-dessous.</p>
+      <div class="kv" style="border:none;padding:12px 0 0">
+        <span class="k">Angle maximal atteint</span>
+        <span class="v" id="rotMax">—</span></div>
+      <div class="duo" style="margin:8px 0 0">
+        <button id="rotReset">Remettre à zéro</button>
+        <button id="rotHelp">Comment lire ?</button>
+      </div>
+      <p id="rotNote">Dos tourné, vous ne voyez plus l'écran : le maximum est
+        mémorisé pour vous. Tournez lentement sur 360°, revenez, puis lisez-le.</p>
     </div>
 
     <h3>Vue affichée</h3>

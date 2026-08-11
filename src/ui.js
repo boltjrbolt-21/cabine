@@ -210,17 +210,32 @@ uiReady = function(){
    de vue qui ne se déclenche pas est indiagnosticable : on ne sait pas si
    c'est le seuil, la mesure, ou la vue qui manque. */
 const LOCK_LABEL = { face:'Face', profil:'Profil', dos:'Dos' };
-let rotSeen = false;
+let rotMax = 0;
 uiRotation = function(band, deg, calibree, conf){
-  if(!sheetNow || sheetNow.id !== 'shViews') return;   // invisible : rien à peindre
   const a = Math.min(180, Math.abs(deg));
+  // Le maximum se mémorise même feuille fermée : dos tourné, l'écran n'est
+  // plus visible, et c'est précisément l'angle qu'on cherche à connaître.
+  if(conf > 0.5 && a > rotMax) rotMax = a;
+  if(!sheetNow || sheetNow.id !== 'shViews') return;   // invisible : rien à peindre
   el('#rotDeg').textContent = Math.round(deg) + '°';
   el('#rotFill').style.width = (a/180*100).toFixed(1) + '%';
+  el('#rotMax').textContent = rotMax ? Math.round(rotMax) + '°' : '—';
   const b = el('#rotBand');
   b.textContent = LOCK_LABEL[band] + (calibree ? '' : ' — non calibrée');
   b.classList.toggle('miss', !calibree);
-  if(!rotSeen && conf > 0.5){ rotSeen = true; el('#rotNote').textContent =
-    'La mesure suit votre rotation. Si le dos ne s’active jamais, forcez-le ci-dessous.'; }
+};
+el('#rotReset').onclick = ()=>{ rotMax = 0; el('#rotMax').textContent = '—';
+  toast('Maximum remis à zéro'); };
+el('#rotHelp').onclick = ()=>{
+  alert(
+    "Deux vérifications.\n\n"+
+    "1) SENS — placez-vous FACE à la caméra. L'indicateur doit afficher "+
+    "« Face » et un angle proche de 0°. S'il affiche « Dos », l'avant et "+
+    "l'arrière sont inversés : dites-le-moi, c'est un signe à corriger.\n\n"+
+    "2) PORTÉE — tournez lentement sur un tour complet, puis revenez et "+
+    "lisez « angle maximal atteint ». Il devrait approcher 180°. S'il "+
+    "plafonne vers 90°, la mesure se replie encore.\n\n"+
+    "En attendant, « Vue affichée » vous laisse forcer la vue à la main.");
 };
 
 for(const b of els('#viewLock button')) b.onclick = ()=>{
