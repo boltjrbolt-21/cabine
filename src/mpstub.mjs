@@ -54,14 +54,19 @@ export class PoseLandmarker {
   close(){}
 }
 
-// masque : un ovale de peau au niveau du visage et des bras
+/* Silhouette complète, comme le vrai modèle la rend : fond 0, peau 2,
+   visage 3, vêtements 4. Le torse doit exister en catégorie « vêtements »,
+   sans quoi la découpe seconde peau n'aurait rien à quoi se raccrocher. */
 function mask(w, h){
   const a = new Uint8Array(w*h);
   for(let y=0;y<h;y++) for(let x=0;x<w;x++){
     const nx = x/w, ny = y/h;
-    const face = ((nx-0.5)**2)/0.0045 + ((ny-0.13)**2)/0.004 < 1;
-    const arms = (nx < 0.34 || nx > 0.66) && ny > 0.28 && ny < 0.62;
-    a[y*w+x] = face ? 3 : arms ? 2 : 0;
+    const face  = ((nx-0.5)**2)/0.0045 + ((ny-0.13)**2)/0.004 < 1;
+    const torso = nx > 0.33 && nx < 0.67 && ny > 0.26 && ny < 0.70;
+    const arms  = (nx > 0.22 && nx < 0.36 || nx > 0.64 && nx < 0.78)
+                  && ny > 0.28 && ny < 0.62;
+    const legs  = nx > 0.36 && nx < 0.64 && ny >= 0.70 && ny < 0.97;
+    a[y*w+x] = face ? 3 : arms ? 2 : (torso || legs) ? 4 : 0;
   }
   return a;
 }

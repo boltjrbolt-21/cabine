@@ -52,7 +52,8 @@ const bind = (id,key)=>{
   show();
 };
 bind('sWidth','width');   bind('sLength','length');  bind('sOffset','offset');
-bind('sShade','shade');   bind('sSmooth','smooth');  bind('sOpacity','opacity');""")
+bind('sShade','shade');   bind('sSmooth','smooth');  bind('sOpacity','opacity');
+bind('sFit','fit');""")
 
 # --- 4. la boucle ne tourne que si le miroir est a l'ecran ------------
 engine = sub(engine,
