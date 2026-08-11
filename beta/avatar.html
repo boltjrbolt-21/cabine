@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Cabine — avatar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,400&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400&display=swap" rel="stylesheet">
+<style>
+  :root{--ink:#14110F;--panel:#1C1815;--line:#332C25;--brass:#C8A45C;
+        --brass-dim:#8A7440;--paper:#EDE6DA;--muted:#968B7D;--alert:#C4664A}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;overflow:hidden}
+  body{background:var(--ink);color:var(--paper);font-family:'Inter',system-ui,sans-serif;
+       display:flex;flex-direction:column;-webkit-font-smoothing:antialiased}
+
+  header{display:flex;align-items:baseline;gap:14px;padding:12px 18px;
+         border-bottom:1px solid var(--line);flex-wrap:wrap;flex:0 0 auto}
+  h1{font-family:'Bodoni Moda',serif;font-weight:400;font-size:24px}
+  .sub{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.14em;
+       text-transform:uppercase;color:var(--muted)}
+  a.back{margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:11px;
+         color:var(--brass);text-decoration:none;border-bottom:1px solid var(--brass-dim)}
+
+  #view{flex:1;position:relative;min-height:0;touch-action:none;cursor:grab}
+  #view:active{cursor:grabbing}
+  #view canvas{display:block;width:100%;height:100%}
+  #azimut{position:absolute;top:14px;left:50%;transform:translateX(-50%);
+          font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.16em;
+          color:var(--muted);pointer-events:none}
+  #msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+       text-align:center;padding:30px;font-size:13px;line-height:1.6;color:var(--muted)}
+  #msg a{color:var(--brass)}
+
+  footer{flex:0 0 auto;border-top:1px solid var(--line);background:var(--panel);
+         padding:12px 16px 22px;display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+  button{padding:11px;background:transparent;color:var(--paper);border:1px solid var(--line);
+         cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:11px;
+         letter-spacing:.12em;text-transform:uppercase}
+  button:hover{border-color:var(--brass);color:var(--brass)}
+  button:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+  button[aria-pressed=true]{background:var(--brass);color:#14110F;border-color:var(--brass)}
+  .full{grid-column:1 / -1}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Avatar</h1>
+  <div class="sub">torse volumique · 360°</div>
+  <a class="back" href="./">← Cabine</a>
+</header>
+
+<div id="view">
+  <div id="azimut"></div>
+  <div id="msg">Chargement…</div>
+</div>
+
+<footer>
+  <button id="btnSpin" aria-pressed="false">Rotation auto</button>
+  <button id="btnReset">Recadrer</button>
+  <button id="btnShot" class="full">Enregistrer l'image</button>
+</footer>
+
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+
+const $ = id => document.getElementById(id);
+const host = $('view'), msg = $('msg');
+
+const data = (()=>{ try{ return JSON.parse(localStorage.getItem('cabine.avatar')); }catch(e){ return null; } })();
+if(!data || !data.face){
+  msg.innerHTML = 'Aucun vêtement calibré.<br>Revenez à la <a href="./">Cabine</a>, remplissez au moins la vue de face, puis relancez « Créer l\u2019avatar 3D ».';
+} else {
+  build().catch(err => { msg.textContent = 'Échec : ' + err.message; });
+}
+
+const loadImg = src => new Promise((ok,ko)=>{
+  const i = new Image(); i.onload=()=>ok(i); i.onerror=()=>ko(new Error('image illisible')); i.src=src;
+});
+
+/* ---------------------------------------------------------------
+   Texture cylindrique. Repère angulaire : u=0 flanc gauche (la
+   couture), 0.25 face, 0.5 flanc droit, 0.75 dos.
+   --------------------------------------------------------------- */
+const V_SHOULDER = 0.13, V_HEM = 0.94;
+
+async function buildAtlas(){
+  const W = 2048, H = 1024;
+  const c = document.createElement('canvas'); c.width=W; c.height=H;
+  const g = c.getContext('2d');
+
+  const face   = data.face   ? await loadImg(data.face.img)   : null;
+  const profil = data.profil ? await loadImg(data.profil.img) : null;
+  const dos    = data.dos    ? await loadImg(data.dos.img)    : null;
+
+  // fond : la couleur dominante du vêtement, pour que les trous ne soient pas noirs
+  g.fillStyle = dominant(face, data.face.anch);
+  g.fillRect(0,0,W,H);
+
+  // secteur = [centre u, demi-largeur u, image, ancrages, retourné]
+  const secteurs = [
+    [0.25, 0.17, face,   data.face   && data.face.anch,   false],
+    [0.75, 0.17, dos    || face, (dos ? data.dos.anch : data.face.anch), false],
+    [0.50, 0.13, profil || face, (profil ? data.profil.anch : data.face.anch), false],
+    [0.00, 0.13, profil || face, (profil ? data.profil.anch : data.face.anch), true]
+  ];
+
+  for(const [cu, hw, img, an, flip] of secteurs){
+    if(!img || !an) continue;
+    paste(g, W, H, img, an, cu, hw, flip);
+    if(cu === 0) paste(g, W, H, img, an, 1, hw, flip);  // raccord de la couture
+  }
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  return tex;
+}
+
+// colle une vue dans son secteur, en alignant épaules et ourlet, avec fondu sur les bords
+function paste(g, W, H, img, an, cu, hw, flip){
+  const sx0 = an.x1*img.width, sx1 = an.x2*img.width;
+  const sy  = an.sy*img.height, hy = an.hy*img.height;
+
+  const dw = 2*hw*W;                                   // largeur cible du secteur
+  const scaleX = dw / (sx1-sx0);
+  const scaleY = ((V_HEM-V_SHOULDER)*H) / (hy-sy);
+
+  const tmp = document.createElement('canvas');
+  tmp.width = Math.ceil(img.width*scaleX);
+  tmp.height = Math.ceil(img.height*scaleY);
+  const tg = tmp.getContext('2d');
+  if(flip){ tg.translate(tmp.width,0); tg.scale(-1,1); }
+  tg.drawImage(img, 0,0, tmp.width, tmp.height);
+
+  // fondu latéral pour que les secteurs se marient
+  tg.globalCompositeOperation = 'destination-in';
+  const grad = tg.createLinearGradient(0,0,tmp.width,0);
+  grad.addColorStop(0,'rgba(0,0,0,0)');
+  grad.addColorStop(0.16,'rgba(0,0,0,1)');
+  grad.addColorStop(0.84,'rgba(0,0,0,1)');
+  grad.addColorStop(1,'rgba(0,0,0,0)');
+  tg.fillStyle = grad; tg.fillRect(0,0,tmp.width,tmp.height);
+
+  const cxSrc = flip ? (tmp.width - (sx0+sx1)/2*scaleX) : ((sx0+sx1)/2*scaleX);
+  g.drawImage(tmp, cu*W - cxSrc, V_SHOULDER*H - sy*scaleY);
+}
+
+function dominant(img, an){
+  if(!img) return '#3A3A40';
+  const c = document.createElement('canvas'); c.width=c.height=24;
+  const g = c.getContext('2d', { willReadFrequently:true });
+  g.drawImage(img, an.x1*img.width, an.sy*img.height,
+                   (an.x2-an.x1)*img.width, (an.hy-an.sy)*img.height, 0,0,24,24);
+  const p = g.getImageData(0,0,24,24).data;
+  let r=0,gg=0,b=0,n=0;
+  for(let i=0;i<p.length;i+=4){ if(p[i+3]>128){ r+=p[i]; gg+=p[i+1]; b+=p[i+2]; n++; } }
+  if(!n) return '#3A3A40';
+  return `rgb(${(r/n)|0},${(gg/n)|0},${(b/n)|0})`;
+}
+
+/* ---------------------------------------------------------------
+   Torse paramétrique : anneaux elliptiques de rayon variable.
+   La couture est sur le flanc gauche, là où u boucle.
+   --------------------------------------------------------------- */
+function torso(ratio){
+  const RINGS = [
+    [0.00, 0.34], [0.05, 0.62], [0.13, 1.00], [0.24, 0.99],
+    [0.40, 0.93], [0.56, 0.88], [0.72, 0.92], [0.88, 0.95],
+    [0.97, 0.90], [1.00, 0.72]
+  ];
+  const SEG = 128, DEPTH = 0.56;
+  const a = 0.5, height = ratio;                     // demi-carrure = 0,5
+  const pos = [], uv = [], idx = [];
+
+  for(let r=0;r<RINGS.length;r++){
+    const [v, k] = RINGS[r];
+    for(let i=0;i<=SEG;i++){
+      const t = i/SEG, ang = t*Math.PI*2 - Math.PI/2;
+      pos.push(a*k*Math.sin(ang), (0.5-v)*height, a*k*DEPTH*Math.cos(ang));
+      uv.push(t, 1-v);
+    }
+  }
+  const row = SEG+1;
+  for(let r=0;r<RINGS.length-1;r++){
+    for(let i=0;i<SEG;i++){
+      const A = r*row+i, B = A+1, C = A+row, D = C+1;
+      idx.push(A,C,B, B,C,D);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv,2));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+/* --------------------------------------------------------------- */
+let renderer, scene, camera, mesh;
+let yaw = 0, pitch = 0.05, dist = 2.5, spin = false;
+
+async function build(){
+  const tex = await buildAtlas();
+  msg.remove();
+
+  renderer = new THREE.WebGLRenderer({ antialias:true, alpha:false, preserveDrawingBuffer:true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  host.appendChild(renderer.domElement);
+
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color('#100E0C');
+  camera = new THREE.PerspectiveCamera(38, 1, 0.1, 40);
+
+  mesh = new THREE.Mesh(torso(data.ratio || 1.35), new THREE.MeshStandardMaterial({
+    map: tex, roughness: 0.88, metalness: 0.0, side: THREE.DoubleSide
+  }));
+  scene.add(mesh);
+
+  scene.add(new THREE.HemisphereLight('#EDE6DA', '#241E19', 0.85));
+  const key = new THREE.DirectionalLight('#FFF3DC', 1.15);
+  key.position.set(1.4, 2.0, 2.2); scene.add(key);
+  const rim = new THREE.DirectionalLight('#C8A45C', 0.55);
+  rim.position.set(-2.0, 0.6, -1.6); scene.add(rim);
+
+  addEventListener('resize', resize); resize();
+  bindPointer();
+  renderer.setAnimationLoop(tick);
+}
+
+function resize(){
+  const w = host.clientWidth, h = host.clientHeight;
+  renderer.setSize(w,h,false);
+  camera.aspect = w/h; camera.updateProjectionMatrix();
+}
+
+function tick(){
+  if(spin) yaw += 0.006;
+  const p = Math.max(-0.9, Math.min(0.9, pitch));
+  camera.position.set(
+    dist*Math.cos(p)*Math.sin(yaw),
+    dist*Math.sin(p),
+    dist*Math.cos(p)*Math.cos(yaw)
+  );
+  camera.lookAt(0,0,0);
+  const deg = ((yaw*180/Math.PI)%360+360)%360;
+  const nom = deg<45||deg>315 ? 'FACE' : deg<135 ? 'FLANC DROIT' : deg<225 ? 'DOS' : 'FLANC GAUCHE';
+  $('azimut').textContent = nom + ' · ' + Math.round(deg) + '°';
+  renderer.render(scene,camera);
+}
+
+function bindPointer(){
+  const pts = new Map();
+  let last = null, lastPinch = 0;
+
+  host.addEventListener('pointerdown', e=>{
+    host.setPointerCapture(e.pointerId);
+    pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    last = {x:e.clientX,y:e.clientY};
+    spin = false; $('btnSpin').setAttribute('aria-pressed','false');
+  });
+
+  host.addEventListener('pointermove', e=>{
+    if(!pts.has(e.pointerId)) return;
+    pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+
+    if(pts.size >= 2){
+      const [p1,p2] = [...pts.values()];
+      const d = Math.hypot(p1.x-p2.x, p1.y-p2.y);
+      if(lastPinch) dist = Math.max(1.4, Math.min(6, dist * lastPinch/d));
+      lastPinch = d;
+      return;
+    }
+    if(last){
+      yaw   -= (e.clientX-last.x) * 0.008;
+      pitch += (e.clientY-last.y) * 0.005;
+    }
+    last = {x:e.clientX,y:e.clientY};
+  });
+
+  const up = e=>{ pts.delete(e.pointerId); last=null; if(pts.size<2) lastPinch=0; };
+  host.addEventListener('pointerup', up);
+  host.addEventListener('pointercancel', up);
+  host.addEventListener('wheel', e=>{
+    e.preventDefault();
+    dist = Math.max(1.4, Math.min(6, dist + e.deltaY*0.002));
+  }, { passive:false });
+}
+
+$('btnSpin').onclick = e=>{
+  spin = !spin;
+  e.currentTarget.setAttribute('aria-pressed', spin ? 'true':'false');
+};
+$('btnReset').onclick = ()=>{ yaw=0; pitch=0.05; dist=2.5; };
+$('btnShot').onclick = ()=>{
+  if(!renderer) return;
+  renderer.render(scene,camera);
+  const a = document.createElement('a');
+  a.download = 'avatar-'+Date.now()+'.png';
+  a.href = renderer.domElement.toDataURL('image/png');
+  a.click();
+};
+</script>
+</body>
+</html>
