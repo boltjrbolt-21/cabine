@@ -614,6 +614,15 @@ input[type=file]{display:none}
         <input type="range" id="sOffset" min="-0.3" max="0.3" step="0.01" value="0.02"></div>
     </div>
 
+    <h3>Ajustement</h3>
+    <div class="group">
+      <div class="fld"><label for="sFit">Seconde peau <span id="vFit">85 %</span></label>
+        <input type="range" id="sFit" min="0" max="1" step="0.01" value="0.85"></div>
+    </div>
+    <p class="note">Le vêtement est découpé au contour de votre corps : il ne peut
+      plus flotter devant ni déborder derrière. Montez la <b>carrure</b> jusqu'à ce
+      qu'il couvre bien vos épaules — le surplus sera coupé tout seul.</p>
+
     <h3>Rendu</h3>
     <div class="group">
       <div class="fld"><label for="sShade">Lumière <span id="vShade">70 %</span></label>
@@ -1396,7 +1405,8 @@ function finishMeasure(){
   if(uiMeasured) uiMeasured(sure);
 }
 
-const cfg = { width:1.05, length:1.25, offset:0.02, shade:0.7, smooth:0.45, opacity:1 };
+const cfg = { width:1.05, length:1.25, offset:0.02, shade:0.7, smooth:0.45,
+              opacity:1, fit:0.85 };
 /* Un multiplicateur de 1,05x ne dit rien a personne. On affiche la
    position du curseur sur sa course ; la valeur reelle, elle, ne change pas. */
 const bind = (id,key)=>{
@@ -1408,6 +1418,7 @@ const bind = (id,key)=>{
 };
 bind('sWidth','width');   bind('sLength','length');  bind('sOffset','offset');
 bind('sShade','shade');   bind('sSmooth','smooth');  bind('sOpacity','opacity');
+bind('sFit','fit');
 
 /* --------------------------------------------------------------- */
 const MODEL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
@@ -1435,6 +1446,30 @@ function ensurePose(n){
 const maskCv = document.createElement('canvas');
 const mctx = maskCv.getContext('2d');
 let maskImg = null, mask32 = null, maskReady = false, maskDirty = false, segFrame = 0;
+
+/* Calques du repli sans carte graphique. Ils ne sont fabriqués que si
+   WebGL manque : sur le chemin normal, un seul masque à deux canaux suffit. */
+const silCv = document.createElement('canvas'), silCtx = silCv.getContext('2d');
+const skinCv = document.createElement('canvas'), skinCtx = skinCv.getContext('2d');
+let silImg = null, skinImg = null, sil32 = null, skin32 = null;
+
+function buildCpuMasks(mw, mh, arr){
+  if(silCv.width !== mw || silCv.height !== mh){
+    silCv.width = skinCv.width = mw;
+    silCv.height = skinCv.height = mh;
+    silImg  = silCtx.createImageData(mw,mh);
+    skinImg = skinCtx.createImageData(mw,mh);
+    sil32  = new Uint32Array(silImg.data.buffer);
+    skin32 = new Uint32Array(skinImg.data.buffer);
+  }
+  for(let i=0;i<arr.length;i++){
+    const c = arr[i];
+    sil32[i]  = c !== 0       ? 0xFFFFFFFF : 0;
+    skin32[i] = c<=3 && c>0   ? 0xFFFFFFFF : 0;
+  }
+  silCtx.putImageData(silImg,0,0);
+  skinCtx.putImageData(skinImg,0,0);
+}
 
 /* Cadence de segmentation adaptative. La peau ne se déplace pas d'une image
    à l'autre, alors qu'un passage du réseau coûte plusieurs millisecondes :
@@ -1738,7 +1773,10 @@ function loop(){
 
       // masque de peau : recalculé une image sur segEvery, il change lentement
       const occOn = !!(segmenter && elOcclusion.checked);
-      if(occOn){
+      // la seconde peau réclame le même masque : on le calcule si l'une
+      // ou l'autre en a besoin, jamais deux fois
+      const fitOn = !!(segmenter && cfg.fit > 0.01);
+      if(occOn || fitOn){
         try{
           if(segFrame++ % segEvery === 0){
             const seg = segmenter.segmentForVideo(video, t0);
@@ -1752,10 +1790,23 @@ function loop(){
               // au lieu de quatre, sur les soixante-cinq mille pixels
               mask32 = new Uint32Array(maskImg.data.buffer);
             }
+            /* Le modèle rend six catégories : 0 fond, 1 cheveux, 2 peau,
+               3 visage, 4 vêtements, 5 accessoires. On n'exploitait que la
+               peau ; la silhouette, elle, était recalculée puis jetée à
+               chaque image. Elle vaut pourtant mieux : elle dit exactement
+               où s'arrête le corps.
+
+               Deux canaux, et l'alpha reste à 255 partout. Un canvas 2D
+               stocke ses pixels prémultipliés : un pixel transparent verrait
+               ses composantes écrasées à zéro, et le canal silhouette
+               reviendrait vide de la carte graphique. */
             for(let i=0;i<arr.length;i++){
-              const c = arr[i];                     // 1 cheveux, 2 peau, 3 visage
-              mask32[i] = (c===1 || c===2 || c===3) ? 0xFFFFFFFF : 0;
+              const c = arr[i];
+              const person = c !== 0     ? 0x000000FF : 0;   // rouge  : silhouette
+              const skin   = c<=3 && c>0 ? 0x0000FF00 : 0;   // vert   : peau nue
+              mask32[i] = 0xFF000000 | skin | person;
             }
+            if(!MESH_OK) buildCpuMasks(mw, mh, arr);
             mctx.putImageData(maskImg,0,0);
             cm.close();
             maskReady = true; maskDirty = true;
@@ -1772,7 +1823,8 @@ function loop(){
 
       if(MESH_OK){
         // tissu, éclairage et occlusion en une seule passe sur la carte graphique
-        warpRender(G, gw, gh, mT, bones, W, H, cfg.shade, occOn && maskReady, alpha);
+        warpRender(G, gw, gh, mT, bones, W, H, cfg.shade, occOn && maskReady,
+                   alpha, (fitOn && maskReady) ? cfg.fit : 0);
         ctx.drawImage(warpCv, 0, 0);
       }else{
         const put = c => {
@@ -1796,10 +1848,19 @@ function loop(){
           put(lctx);
           lctx.globalCompositeOperation = 'source-over';
         }
+        /* Sans carte graphique, le compositing du canvas ne sait travailler
+           qu'avec l'alpha : impossible d'y lire deux canaux dans une même
+           image. On garde donc, pour ce chemin seul, un calque par usage. */
+        if(fitOn && maskReady){
+          lctx.globalCompositeOperation = 'destination-in';
+          lctx.save(); lctx.translate(W,0); lctx.scale(-1,1);
+          lctx.drawImage(silCv,0,0,W,H); lctx.restore();
+          lctx.globalCompositeOperation = 'source-over';
+        }
         if(occOn && maskReady){
           lctx.globalCompositeOperation = 'destination-out';
           lctx.save(); lctx.translate(W,0); lctx.scale(-1,1);
-          lctx.drawImage(maskCv,0,0,W,H); lctx.restore();
+          lctx.drawImage(skinCv,0,0,W,H); lctx.restore();
           lctx.globalCompositeOperation = 'source-over';
         }
         ctx.globalAlpha = alpha;
@@ -1896,7 +1957,7 @@ function initGL(){
     precision mediump float;
     varying vec2 vUV; varying vec2 vScr; varying float vA;
     uniform sampler2D uTex, uShade, uMask;
-    uniform float uShadeAmt, uOcc, uAlpha, uMean;
+    uniform float uShadeAmt, uOcc, uAlpha, uMean, uFit;
     vec3 softLight(vec3 b, float s){
       return (s <= 0.5) ? b - (1.0-2.0*s)*b*(1.0-b)
                         : b + (2.0*s-1.0)*(sqrt(b)-b);
@@ -1912,9 +1973,17 @@ function initGL(){
         c.rgb = mix(c.rgb, softLight(c.rgb, s), uShadeAmt);
       }
       float a = c.a * vA * uAlpha;
-      if(uOcc > 0.5){
+      if(uOcc > 0.5 || uFit > 0.01){
         // le masque vient de l'image caméra non miroitée
-        a *= 1.0 - texture2D(uMask, vec2(1.0 - vScr.x, vScr.y)).a;
+        vec4 m = texture2D(uMask, vec2(1.0 - vScr.x, vScr.y));
+        if(uFit > 0.01){
+          // Seconde peau : le tissu ne peut pas exister hors du corps.
+          // Le masque fait 256x256 pour un écran bien plus grand, donc on
+          // borde le contour au lieu de le trancher — une coupe franche
+          // dessinerait un escalier le long des épaules.
+          a *= mix(1.0, smoothstep(0.30, 0.72, m.r), uFit);
+        }
+        if(uOcc > 0.5) a *= 1.0 - m.g;
       }
       gl_FragColor = vec4(c.rgb * a, a);
     }`));
@@ -1925,7 +1994,7 @@ function initGL(){
   // getUniformLocation et getAttribLocation sont des recherches par nom qui
   // traversent le pilote. Huit par image, c'était huit de trop.
   U = {};
-  for(const k of ['uRes','uShadeAmt','uOcc','uAlpha','uMean','uTex','uShade','uMask'])
+  for(const k of ['uRes','uShadeAmt','uOcc','uAlpha','uMean','uFit','uTex','uShade','uMask'])
     U[k] = gl.getUniformLocation(glProg, k);
   At = {};
   for(const k of ['aPos','aUV','aA']) At[k] = gl.getAttribLocation(glProg, k);
@@ -2020,7 +2089,7 @@ function distSeg(x,y, ax,ay, bx,by){
   return Math.sqrt(dx*dx + dy*dy);
 }
 
-function warpRender(G, gw, gh, mT, bones, W, H, shadeAmt, occ, alpha){
+function warpRender(G, gw, gh, mT, bones, W, H, shadeAmt, occ, alpha, fit){
   if(warpCv.width !== W || warpCv.height !== H){ warpCv.width = W; warpCv.height = H; }
 
   // On sort les coefficients de la matrice du torse de la boucle : lire six
@@ -2070,6 +2139,7 @@ function warpRender(G, gw, gh, mT, bones, W, H, shadeAmt, occ, alpha){
   gl.uniform1f(U.uOcc, occ ? 1 : 0);
   gl.uniform1f(U.uAlpha, alpha);
   gl.uniform1f(U.uMean, shadeMean);
+  gl.uniform1f(U.uFit, fit);
 
   // les pointeurs d'attributs sont posés une fois pour toutes dans initGL :
   // il ne reste qu'à réécrire le contenu des deux tampons dynamiques
@@ -2086,7 +2156,10 @@ function warpRender(G, gw, gh, mT, bones, W, H, shadeAmt, occ, alpha){
     gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, tiny);
   }
 
-  if(occ && maskDirty){
+  // La seconde peau lit la même texture que l'occlusion. Ne l'envoyer que
+  // pour l'occlusion laissait le nuanceur échantillonner une texture vide,
+  // donc une silhouette nulle, donc un vêtement entièrement effacé.
+  if((occ || fit > 0.01) && maskDirty){
     gl.activeTexture(gl.TEXTURE2);
     if(maskTexW !== maskCv.width || maskTexH !== maskCv.height){
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, maskCv);
@@ -2359,7 +2432,7 @@ for(const r of els('input[type=range]')){
 }
 
 const DEFAULTS = { sWidth:1.05, sLength:1.25, sOffset:0.02,
-                   sShade:0.7, sSmooth:0.45, sOpacity:1 };
+                   sShade:0.7, sSmooth:0.45, sOpacity:1, sFit:0.85 };
 el('#adjReset').onclick = ()=>{
   for(const [id,v] of Object.entries(DEFAULTS)){
     const r = el('#'+id);
