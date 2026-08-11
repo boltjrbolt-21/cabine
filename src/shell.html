@@ -143,6 +143,8 @@ svg{display:block;flex:none}
 .rail-b svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.7}
 
 /* guidage */
+/* pendant le détourage, la barre occupe le bas : le bandeau monte */
+#stage:has(#cutbar[style*="flex"]) #hint{top:16%}
 #hint{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:15;
   max-width:78%;padding:13px 20px;border-radius:var(--r-l);text-align:center;
   background:rgba(16,13,11,.82);border:1px solid var(--line);
@@ -477,6 +479,7 @@ input[type=file]{display:none}
 
       <div id="cutbar">
         <button data-cut="auto">Fond auto</button>
+        <button data-cut="uni">Fond uni</button>
         <button data-cut="reset">Tout garder</button>
         <label>Tolérance<input type="range" id="tol" min="12" max="110" step="1" value="46"></label>
         <button data-cut="ok" class="go">Valider</button>
