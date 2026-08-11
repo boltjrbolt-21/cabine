@@ -724,15 +724,19 @@ input[type=file]{display:none}
       <div id="rotHead"><span id="rotBand">—</span><b id="rotDeg">0°</b></div>
       <div id="rotBar"><i id="rotFill"></i><u id="rotMarkA"></u><u id="rotMarkB"></u></div>
       <div id="rotLegend"><span>Face</span><span>Profil</span><span>Dos</span></div>
-      <div class="kv" style="border:none;padding:12px 0 0">
+      <div class="kv" style="padding:12px 0 9px">
         <span class="k">Angle maximal atteint</span>
         <span class="v" id="rotMax">—</span></div>
+      <div class="kv" style="border:none;padding:0">
+        <span class="k">Orientation de la mesure</span>
+        <span class="v" id="rotFlip">—</span></div>
       <div class="duo" style="margin:8px 0 0">
         <button id="rotReset">Remettre à zéro</button>
         <button id="rotHelp">Comment lire ?</button>
       </div>
-      <p id="rotNote">Dos tourné, vous ne voyez plus l'écran : le maximum est
-        mémorisé pour vous. Tournez lentement sur 360°, revenez, puis lisez-le.</p>
+      <p id="rotNote">Le sens avant/arrière se vérifie tout seul : quand votre
+        visage est vu, l'angle doit être petit, sinon la mesure est retournée.
+        Dos tourné vous ne voyez plus l'écran, alors le maximum est mémorisé.</p>
     </div>
 
     <h3>Vue affichée</h3>
@@ -1495,6 +1499,8 @@ const WASM  = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm
 let landmarker, segmenter = null, video, lastT = -1;
 let fpsT = performance.now(), fpsN = 0;
 let yaw = null, band = 'face';
+// vote sur le sens de la profondeur, tranché par la visibilité du visage
+let signVote = 0, signFlip = false;
 // écart angulaire le plus court, pour lisser sans sauter à ±180°
 const angDiff = (a,b)=>{ let d=(a-b)%360; if(d>180)d-=360; if(d<-180)d+=360; return d; };
 
@@ -1685,7 +1691,27 @@ function loop(){
          ce test basculait au gré du bruit. atan2 signé n'a besoin de rien
          d'autre : 0° de face, ±90° de profil, ±180° de dos. */
       const dxw = wl[12].x - wl[11].x, dzw = wl[12].z - wl[11].z;
-      const raw = Math.atan2(dzw, -dxw)*180/Math.PI;
+      let raw = Math.atan2(dzw, -dxw)*180/Math.PI;
+
+      /* Reste une inconnue : ce calcul suppose un sens pour la profondeur.
+         Si l'appareil rend la convention inverse, l'avant et l'arrière
+         s'échangent — et rien dans la géométrie seule ne permet de trancher.
+
+         Le corps, lui, tranche : de face on voit votre nez et vos yeux, de
+         dos on ne les voit plus. C'est une information indépendante de la
+         profondeur. Quand le visage est franchement visible et que vous
+         n'êtes pas de profil, l'angle DOIT être petit ; s'il est grand, la
+         convention est inversée. On accumule ce constat sur quelques images
+         plutôt que de se fier à une seule, et on borne le compteur pour
+         qu'un passage douteux ne puisse pas le faire dériver. */
+      const faceSeen = (P[0].v + P[2].v + P[5].v)/3;
+      const nearProfile = Math.abs(Math.abs(raw) - 90) < 35;
+      if(faceSeen > 0.8 && !nearProfile){
+        signVote += Math.abs(raw) < 90 ? 1 : -1;
+        if(signVote > 40) signVote = 40; else if(signVote < -40) signVote = -40;
+      }
+      signFlip = signVote < -12;
+      if(signFlip) raw = raw > 0 ? raw - 180 : raw + 180;
       yaw = yaw===null ? raw : yaw + angDiff(raw,yaw)*0.25;
       /* angDiff renvoie bien le plus court chemin, mais l'angle lissé, lui,
          n'était jamais ramené dans son intervalle. En oscillant autour de
@@ -1720,7 +1746,7 @@ function loop(){
                            ' · ' + Math.round(yaw ?? 0) + '°';
       // l'interface montre la rotation en direct : sans elle, une bascule
       // qui ne se déclenche pas reste impossible à diagnostiquer
-      if(uiRotation) uiRotation(band, yaw ?? 0, !!views[band], conf);
+      if(uiRotation) uiRotation(band, yaw ?? 0, !!views[band], conf, signFlip);
       elShoulder.textContent = Math.round(shoulderW)+' px';
       elTorso.textContent    = Math.round(torso)+' px';
       elAngle.textContent    = (tilt*180/Math.PI).toFixed(1)+'°';
@@ -2518,7 +2544,7 @@ uiReady = function(){
    c'est le seuil, la mesure, ou la vue qui manque. */
 const LOCK_LABEL = { face:'Face', profil:'Profil', dos:'Dos' };
 let rotMax = 0;
-uiRotation = function(band, deg, calibree, conf){
+uiRotation = function(band, deg, calibree, conf, flip){
   const a = Math.min(180, Math.abs(deg));
   // Le maximum se mémorise même feuille fermée : dos tourné, l'écran n'est
   // plus visible, et c'est précisément l'angle qu'on cherche à connaître.
@@ -2527,6 +2553,7 @@ uiRotation = function(band, deg, calibree, conf){
   el('#rotDeg').textContent = Math.round(deg) + '°';
   el('#rotFill').style.width = (a/180*100).toFixed(1) + '%';
   el('#rotMax').textContent = rotMax ? Math.round(rotMax) + '°' : '—';
+  el('#rotFlip').textContent = flip ? 'corrigée automatiquement' : 'conforme';
   const b = el('#rotBand');
   b.textContent = LOCK_LABEL[band] + (calibree ? '' : ' — non calibrée');
   b.classList.toggle('miss', !calibree);
