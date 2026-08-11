@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ScreenRec — Enregistreur d'écran</title>
+<style>
+  :root{
+    --bg:#0d1016; --panel:#151a23; --panel2:#1c222d; --line:#2a3240;
+    --txt:#e6ebf2; --muted:#8b97a8; --accent:#5b8cff; --accent2:#3a6ae0;
+    --rec:#ff4757; --ok:#2ed573; --radius:14px;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--txt);
+    font:15px/1.5 "Segoe UI",system-ui,-apple-system,sans-serif;
+    min-height:100vh;
+  }
+  header{
+    display:flex; align-items:center; gap:12px;
+    padding:18px 24px; border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg,#141924,#0d1016);
+  }
+  header h1{font-size:19px;margin:0;font-weight:650;letter-spacing:.2px}
+  header .dot{width:11px;height:11px;border-radius:50%;background:var(--rec);box-shadow:0 0 12px var(--rec)}
+  header small{color:var(--muted);margin-left:auto;font-size:12.5px}
+
+  .wrap{display:grid;grid-template-columns:340px 1fr;gap:20px;padding:20px;max-width:1500px;margin:0 auto}
+  @media (max-width:900px){.wrap{grid-template-columns:1fr}}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px}
+  .card h2{font-size:12px;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);margin:0 0 12px}
+
+  label.row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;font-size:14px}
+  label.row + label.row{border-top:1px solid #202733}
+  select,input[type=text]{
+    background:var(--panel2);color:var(--txt);border:1px solid var(--line);
+    border-radius:9px;padding:7px 10px;font-size:13.5px;min-width:135px;outline:none
+  }
+  select:focus{border-color:var(--accent)}
+  input[type=range]{width:140px;accent-color:var(--accent)}
+  .sw{position:relative;width:44px;height:25px;flex:0 0 auto}
+  .sw input{opacity:0;width:0;height:0;position:absolute}
+  .sw span{position:absolute;inset:0;background:#333c4b;border-radius:99px;transition:.18s;cursor:pointer}
+  .sw span::after{content:"";position:absolute;left:3px;top:3px;width:19px;height:19px;border-radius:50%;background:#fff;transition:.18s}
+  .sw input:checked + span{background:var(--accent)}
+  .sw input:checked + span::after{transform:translateX(19px)}
+  .hint{color:var(--muted);font-size:12px;margin-top:10px;line-height:1.45}
+
+  .stage{background:#000;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;position:relative;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center}
+  .stage video{width:100%;height:100%;object-fit:contain;background:#000;display:none}
+  .stage video.on{display:block}
+  .placeholder{color:var(--muted);text-align:center;padding:30px}
+  .placeholder .big{font-size:46px;margin-bottom:8px;opacity:.5}
+
+  .badge{position:absolute;top:12px;left:12px;display:none;align-items:center;gap:8px;background:rgba(10,12,16,.78);backdrop-filter:blur(6px);border:1px solid var(--line);padding:7px 13px;border-radius:99px;font-variant-numeric:tabular-nums;font-size:14px}
+  .badge.on{display:flex}
+  .badge .b{width:9px;height:9px;border-radius:50%;background:var(--rec);animation:pulse 1.1s infinite}
+  .badge.paused .b{background:#ffa502;animation:none}
+  .badge .sz{color:var(--muted);font-size:12px}
+  @keyframes pulse{50%{opacity:.25}}
+
+  #countdown{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.65);font-size:110px;font-weight:700;color:#fff}
+  #countdown.on{display:flex}
+
+  .bar{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
+  button{
+    border:0;border-radius:11px;padding:11px 18px;font-size:14.5px;font-weight:600;
+    cursor:pointer;background:var(--panel2);color:var(--txt);border:1px solid var(--line);transition:.15s
+  }
+  button:hover:not(:disabled){background:#242c39}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover:not(:disabled){background:var(--accent2)}
+  button.danger{background:var(--rec);border-color:var(--rec);color:#fff}
+  button.danger:hover:not(:disabled){background:#e0343f}
+  button.ok{background:var(--ok);border-color:var(--ok);color:#08240f}
+  kbd{background:#0d1016;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:1px 6px;font-size:11.5px;font-family:inherit;color:var(--muted)}
+
+  #msg{margin-top:12px;padding:11px 14px;border-radius:10px;font-size:13.5px;display:none}
+  #msg.on{display:block}
+  #msg.err{background:#3a1a1f;border:1px solid #6b2a33;color:#ffb3ba}
+  #msg.info{background:#132a1c;border:1px solid #26543a;color:#a9f0c4}
+
+  .files{margin-top:16px}
+  .file{display:flex;align-items:center;gap:12px;background:var(--panel2);border:1px solid var(--line);border-radius:11px;padding:11px 13px;margin-bottom:9px}
+  .file .i{font-size:22px}
+  .file .m{flex:1;min-width:0}
+  .file .n{font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .file .d{font-size:12px;color:var(--muted)}
+  .file button{padding:7px 12px;font-size:13px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="dot"></div>
+  <h1>ScreenRec</h1>
+  <small>100 % local — rien n'est envoyé sur Internet</small>
+</header>
+
+<div class="wrap">
+
+  <!-- ---------- PANNEAU RÉGLAGES ---------- -->
+  <div>
+    <div class="card">
+      <h2>Sources</h2>
+      <label class="row">Audio système
+        <span class="sw"><input type="checkbox" id="optSys" checked><span></span></span>
+      </label>
+      <label class="row">Microphone
+        <span class="sw"><input type="checkbox" id="optMic"><span></span></span>
+      </label>
+      <label class="row">Webcam (incrustation)
+        <span class="sw"><input type="checkbox" id="optCam"><span></span></span>
+      </label>
+      <label class="row">Position webcam
+        <select id="camPos">
+          <option value="br">En bas à droite</option>
+          <option value="bl">En bas à gauche</option>
+          <option value="tr">En haut à droite</option>
+          <option value="tl">En haut à gauche</option>
+        </select>
+      </label>
+      <label class="row">Taille webcam
+        <input type="range" id="camSize" min="10" max="35" value="20">
+      </label>
+      <label class="row">Webcam ronde
+        <span class="sw"><input type="checkbox" id="camRound" checked><span></span></span>
+      </label>
+      <p class="hint">L'audio système n'est capturé que si tu coches « Partager l'audio » dans la fenêtre de partage (Chrome / Edge, onglet ou écran entier).</p>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <h2>Qualité</h2>
+      <label class="row">Résolution
+        <select id="optRes">
+          <option value="0">Native (écran)</option>
+          <option value="2160">4K — 2160p</option>
+          <option value="1440">1440p</option>
+          <option value="1080" selected>Full HD — 1080p</option>
+          <option value="720">HD — 720p</option>
+        </select>
+      </label>
+      <label class="row">Images / seconde
+        <select id="optFps">
+          <option value="60">60 fps</option>
+          <option value="30" selected>30 fps</option>
+          <option value="24">24 fps</option>
+          <option value="15">15 fps (léger)</option>
+        </select>
+      </label>
+      <label class="row">Débit vidéo
+        <select id="optBr">
+          <option value="12000000">Très haut — 12 Mbps</option>
+          <option value="8000000" selected>Haut — 8 Mbps</option>
+          <option value="5000000">Moyen — 5 Mbps</option>
+          <option value="2500000">Léger — 2,5 Mbps</option>
+        </select>
+      </label>
+      <label class="row">Format
+        <select id="optFmt">
+          <option value="auto" selected>Automatique (meilleur)</option>
+          <option value="webm">WebM (VP9)</option>
+          <option value="mp4">MP4 (si supporté)</option>
+        </select>
+      </label>
+      <label class="row">Décompte 3-2-1
+        <span class="sw"><input type="checkbox" id="optCd" checked><span></span></span>
+      </label>
+    </div>
+  </div>
+
+  <!-- ---------- SCÈNE ---------- -->
+  <div>
+    <div class="stage">
+      <video id="live" muted playsinline></video>
+      <video id="play" controls playsinline></video>
+      <div class="placeholder" id="ph">
+        <div class="big">🎬</div>
+        <div>Clique sur <b>Démarrer l'enregistrement</b><br>puis choisis l'écran, la fenêtre ou l'onglet à capturer.</div>
+      </div>
+      <div class="badge" id="badge"><span class="b"></span><span id="time">00:00</span><span class="sz" id="size">0 Mo</span></div>
+      <div id="countdown"></div>
+    </div>
+
+    <div class="bar">
+      <button class="primary" id="btnStart">● Démarrer l'enregistrement</button>
+      <button id="btnPause" disabled>❚❚ Pause</button>
+      <button class="danger" id="btnStop" disabled>■ Arrêter</button>
+      <span style="flex:1"></span>
+      <span style="align-self:center;color:var(--muted);font-size:12.5px">
+        <kbd>Ctrl</kbd>+<kbd>Maj</kbd>+<kbd>R</kbd> démarrer/arrêter · <kbd>Ctrl</kbd>+<kbd>Maj</kbd>+<kbd>P</kbd> pause
+      </span>
+    </div>
+
+    <div id="msg"></div>
+
+    <div class="files" id="files"></div>
+  </div>
+</div>
+
+<canvas id="mix" style="display:none"></canvas>
+
+<script>
+(() => {
+"use strict";
+
+const $ = id => document.getElementById(id);
+const live = $("live"), play = $("play"), ph = $("ph"), badge = $("badge"),
+      canvas = $("mix"), ctx = canvas.getContext("2d", { alpha:false });
+
+let displayStream = null, micStream = null, camStream = null,
+    audioCtx = null, recorder = null, chunks = [], bytes = 0,
+    rafId = null, timerId = null, startedAt = 0, pausedMs = 0, pausedAt = 0,
+    camVideo = null, busy = false;
+
+/* ---------- utilitaires ---------- */
+function say(text, type = "info") {
+  const m = $("msg");
+  m.className = "on " + type;
+  m.innerHTML = text;
+}
+function clearMsg(){ $("msg").className = ""; }
+
+function fmtSize(b){
+  if (b < 1024*1024) return (b/1024).toFixed(0) + " Ko";
+  if (b < 1024*1024*1024) return (b/1048576).toFixed(1) + " Mo";
+  return (b/1073741824).toFixed(2) + " Go";
+}
+function fmtTime(ms){
+  const s = Math.floor(ms/1000), h = Math.floor(s/3600),
+        m = Math.floor(s%3600/60), sec = s%60, p = n => String(n).padStart(2,"0");
+  return (h ? p(h)+":" : "") + p(m) + ":" + p(sec);
+}
+function stamp(){
+  const d = new Date(), p = n => String(n).padStart(2,"0");
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}_${p(d.getHours())}h${p(d.getMinutes())}m${p(d.getSeconds())}`;
+}
+
+/* ---------- choix du codec ---------- */
+function pickMime(){
+  const pref = $("optFmt").value;
+  const webm = [
+    'video/webm;codecs=vp9,opus',
+    'video/webm;codecs=vp8,opus',
+    'video/webm'
+  ];
+  const mp4 = [
+    'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+    'video/mp4;codecs=h264,aac',
+    'video/mp4'
+  ];
+  let list;
+  if (pref === "webm") list = webm;
+  else if (pref === "mp4") list = mp4.concat(webm);
+  else list = webm.concat(mp4);           // auto : WebM d'abord (le plus fiable)
+  for (const t of list) if (MediaRecorder.isTypeSupported(t)) return t;
+  return "";
+}
+
+/* ---------- compositeur webcam ---------- */
+function startCompositor(targetH){
+  const src = live;
+  camVideo = document.createElement("video");
+  camVideo.muted = true; camVideo.playsInline = true;
+  camVideo.srcObject = camStream;
+  camVideo.play().catch(()=>{});
+
+  const round = $("camRound").checked, pos = $("camPos").value,
+        ratio = +$("camSize").value / 100;
+
+  let sized = false;
+  const draw = () => {
+    rafId = requestAnimationFrame(draw);
+    const vw = src.videoWidth, vh = src.videoHeight;
+    if (!vw || !vh) return;
+
+    if (!sized || canvas.height !== (targetH || vh)) {
+      const h = targetH ? Math.min(targetH, vh) : vh;
+      canvas.height = Math.round(h / 2) * 2;
+      canvas.width  = Math.round(vw * (canvas.height / vh) / 2) * 2;
+      sized = true;
+    }
+    const W = canvas.width, H = canvas.height;
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, W, H);
+    ctx.drawImage(src, 0, 0, W, H);
+
+    if (camVideo.videoWidth) {
+      const cw = Math.round(W * ratio),
+            ch = Math.round(cw * (round ? 1 : camVideo.videoHeight / camVideo.videoWidth)),
+            pad = Math.round(W * 0.018),
+            x = pos.endsWith("r") ? W - cw - pad : pad,
+            y = pos.startsWith("b") ? H - ch - pad : pad;
+
+      ctx.save();
+      ctx.beginPath();
+      if (round) ctx.arc(x + cw/2, y + ch/2, cw/2, 0, Math.PI*2);
+      else roundRect(ctx, x, y, cw, ch, cw*0.06);
+      ctx.closePath();
+      ctx.shadowColor = "rgba(0,0,0,.55)"; ctx.shadowBlur = cw*0.09;
+      ctx.fillStyle = "#000"; ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.clip();
+      // remplir la zone sans déformer la webcam
+      const s = Math.max(cw / camVideo.videoWidth, ch / camVideo.videoHeight),
+            dw = camVideo.videoWidth * s, dh = camVideo.videoHeight * s;
+      ctx.drawImage(camVideo, x + (cw-dw)/2, y + (ch-dh)/2, dw, dh);
+      ctx.restore();
+
+      ctx.save();
+      ctx.beginPath();
+      if (round) ctx.arc(x + cw/2, y + ch/2, cw/2, 0, Math.PI*2);
+      else roundRect(ctx, x, y, cw, ch, cw*0.06);
+      ctx.lineWidth = Math.max(2, cw*0.012);
+      ctx.strokeStyle = "rgba(255,255,255,.85)";
+      ctx.stroke();
+      ctx.restore();
+    }
+  };
+  draw();
+}
+function roundRect(c,x,y,w,h,r){
+  c.moveTo(x+r,y); c.arcTo(x+w,y,x+w,y+h,r); c.arcTo(x+w,y+h,x,y+h,r);
+  c.arcTo(x,y+h,x,y,r); c.arcTo(x,y,x+w,y,r);
+}
+
+/* ---------- mixage audio ---------- */
+function mixAudio(streams){
+  const sources = streams.filter(s => s && s.getAudioTracks().length);
+  if (!sources.length) return null;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const dest = audioCtx.createMediaStreamDestination();
+  for (const s of sources) {
+    const node = audioCtx.createMediaStreamSource(new MediaStream(s.getAudioTracks()));
+    const gain = audioCtx.createGain();
+    gain.gain.value = 1;
+    node.connect(gain).connect(dest);
+  }
+  return dest.stream.getAudioTracks()[0];
+}
+
+/* ---------- démarrage ---------- */
+async function start(){
+  if (busy) return;
+  busy = true; clearMsg();
+
+  if (!navigator.mediaDevices?.getDisplayMedia) {
+    say("❌ Ton navigateur ne gère pas la capture d'écran. Utilise <b>Chrome</b>, <b>Edge</b> ou <b>Firefox</b> à jour (sur ordinateur).", "err");
+    busy = false; return;
+  }
+
+  const fps = +$("optFps").value, targetH = +$("optRes").value;
+
+  try {
+    displayStream = await navigator.mediaDevices.getDisplayMedia({
+      video: Object.assign({ frameRate:{ ideal:fps, max:fps } },
+                           targetH ? { height:{ ideal:targetH } } : {}),
+      audio: $("optSys").checked
+        ? { echoCancellation:false, noiseSuppression:false, autoGainControl:false }
+        : false
+    });
+  } catch (e) {
+    busy = false;
+    if (e.name !== "NotAllowedError")
+      say("❌ Capture impossible : " + e.message, "err");
+    return;
+  }
+
+  // micro
+  if ($("optMic").checked) {
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({
+        audio:{ echoCancellation:true, noiseSuppression:true, autoGainControl:true }
+      });
+    } catch { say("⚠️ Micro indisponible — l'enregistrement continue sans micro.", "err"); }
+  }
+  // webcam
+  if ($("optCam").checked) {
+    try {
+      camStream = await navigator.mediaDevices.getUserMedia({
+        video:{ width:{ideal:640}, height:{ideal:480}, frameRate:{ideal:30} }
+      });
+    } catch { say("⚠️ Webcam indisponible — l'enregistrement continue sans incrustation.", "err"); }
+  }
+
+  // aperçu
+  live.srcObject = displayStream;
+  await live.play().catch(()=>{});
+  ph.style.display = "none";
+  play.classList.remove("on"); play.removeAttribute("src");
+  live.classList.add("on");
+
+  // l'utilisateur arrête le partage depuis la barre du navigateur
+  displayStream.getVideoTracks()[0].addEventListener("ended", () => { if (recorder) stop(); });
+
+  if ($("optCd").checked) await countdown(3);
+
+  // flux final
+  const out = new MediaStream();
+  if (camStream) {
+    await new Promise(r => {
+      const wait = () => live.videoWidth ? r() : requestAnimationFrame(wait); wait();
+    });
+    startCompositor(targetH);
+    out.addTrack(canvas.captureStream(fps).getVideoTracks()[0]);
+  } else {
+    out.addTrack(displayStream.getVideoTracks()[0]);
+  }
+  const a = mixAudio([displayStream, micStream]);
+  if (a) out.addTrack(a);
+
+  const mime = pickMime();
+  const opts = { videoBitsPerSecond:+$("optBr").value, audioBitsPerSecond:128000 };
+  if (mime) opts.mimeType = mime;
+
+  try { recorder = new MediaRecorder(out, opts); }
+  catch { recorder = new MediaRecorder(out); }
+
+  chunks = []; bytes = 0;
+  recorder.ondataavailable = e => {
+    if (e.data && e.data.size) { chunks.push(e.data); bytes += e.data.size; $("size").textContent = fmtSize(bytes); }
+  };
+  recorder.onstop = finish;
+  recorder.start(1000);
+
+  startedAt = Date.now(); pausedMs = 0; pausedAt = 0;
+  badge.className = "badge on";
+  timerId = setInterval(() => {
+    if (recorder && recorder.state === "recording")
+      $("time").textContent = fmtTime(Date.now() - startedAt - pausedMs);
+  }, 250);
+
+  $("btnStart").disabled = true; $("btnPause").disabled = false; $("btnStop").disabled = false;
+  $("btnPause").textContent = "❚❚ Pause";
+  busy = false;
+}
+
+function countdown(n){
+  return new Promise(res => {
+    const el = $("countdown"); el.classList.add("on");
+    const tick = () => {
+      if (n === 0) { el.classList.remove("on"); return res(); }
+      el.textContent = n--; setTimeout(tick, 1000);
+    };
+    tick();
+  });
+}
+
+function togglePause(){
+  if (!recorder) return;
+  if (recorder.state === "recording") {
+    recorder.pause(); pausedAt = Date.now();
+    badge.classList.add("paused"); $("btnPause").textContent = "▶ Reprendre";
+  } else if (recorder.state === "paused") {
+    recorder.resume(); pausedMs += Date.now() - pausedAt;
+    badge.classList.remove("paused"); $("btnPause").textContent = "❚❚ Pause";
+  }
+}
+
+function stop(){
+  if (recorder && recorder.state !== "inactive") recorder.stop();
+}
+
+function cleanup(){
+  if (rafId) cancelAnimationFrame(rafId), rafId = null;
+  if (timerId) clearInterval(timerId), timerId = null;
+  [displayStream, micStream, camStream].forEach(s => s && s.getTracks().forEach(t => t.stop()));
+  displayStream = micStream = camStream = null;
+  if (camVideo) { camVideo.srcObject = null; camVideo = null; }
+  if (audioCtx) { audioCtx.close().catch(()=>{}); audioCtx = null; }
+  live.srcObject = null; live.classList.remove("on");
+  badge.className = "badge";
+  $("btnStart").disabled = false; $("btnPause").disabled = true; $("btnStop").disabled = true;
+}
+
+function finish(){
+  const type = (recorder && recorder.mimeType) || "video/webm";
+  const blob = new Blob(chunks, { type });
+  const duration = fmtTime(Date.now() - startedAt - pausedMs);
+  recorder = null;
+  cleanup();
+
+  if (!blob.size) { say("⚠️ Aucune donnée enregistrée. Réessaie.", "err"); return; }
+
+  const url = URL.createObjectURL(blob);
+  const ext = type.includes("mp4") ? "mp4" : "webm";
+  const name = `enregistrement_${stamp()}.${ext}`;
+
+  play.src = url; play.classList.add("on"); ph.style.display = "none";
+
+  const file = new File([blob], name, { type });
+
+  const row = document.createElement("div");
+  row.className = "file";
+  row.innerHTML = `<div class="i">🎞️</div>
+    <div class="m"><div class="n">${name}</div>
+    <div class="d">${duration} · ${fmtSize(blob.size)} · ${ext.toUpperCase()}</div></div>`;
+
+  const pv = document.createElement("button");
+  pv.textContent = "▶ Revoir";
+  pv.onclick = () => { play.src = url; play.classList.add("on"); play.play(); };
+
+  const dl = document.createElement("button");
+  dl.className = "ok"; dl.textContent = "⤓ Enregistrer";
+  dl.onclick = () => saveAs(blob, name, ext);
+
+  const sh = document.createElement("button");
+  sh.textContent = "↗ Partager";
+  sh.onclick = () => share(file, name);
+
+  row.append(pv, dl, sh);
+  $("files").prepend(row);
+
+  say(`✅ Terminé — <b>${duration}</b>, ${fmtSize(blob.size)}. Une copie vient d'être téléchargée dans ton dossier <b>Téléchargements</b>.
+       Utilise <b>⤓ Enregistrer</b> pour choisir un autre dossier, ou <b>↗ Partager</b> pour l'envoyer directement.`, "info");
+  saveAs(blob, name, ext, true);   // sauvegarde automatique dans Téléchargements
+}
+
+/* ---------- export ---------- */
+async function saveAs(blob, name, ext, silent){
+  // 1) "Enregistrer sous…" natif (Chrome / Edge) : on choisit le dossier
+  if (!silent && window.showSaveFilePicker) {
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: name,
+        types: [{
+          description: ext === "mp4" ? "Vidéo MP4" : "Vidéo WebM",
+          accept: { [blob.type.split(";")[0]]: ["." + ext] }
+        }]
+      });
+      const w = await handle.createWritable();
+      await w.write(blob); await w.close();
+      say("✅ Vidéo enregistrée : <b>" + handle.name + "</b>", "info");
+      return;
+    } catch (e) {
+      if (e.name === "AbortError") return;   // annulé par l'utilisateur
+    }
+  }
+  // 2) repli : téléchargement classique
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+}
+
+async function share(file, name){
+  if (navigator.canShare && navigator.canShare({ files:[file] })) {
+    try {
+      await navigator.share({ files:[file], title:name, text:"Mon enregistrement d'écran" });
+      say("✅ Vidéo partagée.", "info");
+      return;
+    } catch (e) {
+      if (e.name === "AbortError") return;
+    }
+  }
+  say(`ℹ️ Le partage direct n'est pas disponible ici (souvent limité aux petits fichiers ou au mobile).
+       Utilise <b>⤓ Enregistrer</b>, puis envoie le fichier par mail, WhatsApp, Drive ou WeTransfer.`, "info");
+}
+
+/* ---------- événements ---------- */
+$("btnStart").onclick = start;
+$("btnPause").onclick = togglePause;
+$("btnStop").onclick  = stop;
+
+addEventListener("keydown", e => {
+  if (!(e.ctrlKey && e.shiftKey)) return;
+  const k = e.key.toLowerCase();
+  if (k === "r") { e.preventDefault(); recorder ? stop() : start(); }
+  if (k === "p") { e.preventDefault(); togglePause(); }
+});
+
+addEventListener("beforeunload", e => {
+  if (recorder && recorder.state !== "inactive") { e.preventDefault(); e.returnValue = ""; }
+});
+
+if (!navigator.mediaDevices?.getDisplayMedia)
+  say("❌ Ce navigateur ne gère pas la capture d'écran. Ouvre cette page dans <b>Chrome</b> ou <b>Edge</b> sur ordinateur.", "err");
+})();
+</script>
+</body>
+</html>
