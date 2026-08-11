@@ -950,7 +950,7 @@ async function boot(){
     startEl.style.display='flex';
     statusEl.textContent='Interrompu'; statusEl.style.color='var(--alert)';
     const m = { CONTEXTE:"Cette page doit être servie en <b>https://</b> ou <b>http://localhost</b>.",
-      NotAllowedError:"Autorisation refusée. Réglages → Safari → Caméra → Demander, puis rechargez.",
+      NotAllowedError:"Autorisation caméra refusée. Réautorisez-la pour ce site dans les réglages de votre navigateur, puis rechargez la page.",
       NotFoundError:"Aucune caméra détectée.",
       NotReadableError:"La caméra est utilisée par une autre app." }[err.name==='Error'?err.message:err.name];
     startEl.querySelector('p').innerHTML = m || ('Échec : '+err.name+' — '+err.message);
