@@ -1,0 +1,38 @@
+{
+  "name": "FitRoom AI — cabine d'essayage intelligente",
+  "short_name": "FitRoom AI",
+  "description": "Essayez vos vêtements en direct avec votre caméra : le vêtement suit vos épaules, vos bras et la lumière de la pièce.",
+  "lang": "fr",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0B0A09",
+  "theme_color": "#0B0A09",
+  "categories": [
+    "shopping",
+    "lifestyle",
+    "photo"
+  ],
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

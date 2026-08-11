@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+<title>FitRoom AI — cabine d'essayage intelligente</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0B0A09">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="FitRoom AI">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* ===================================================================
+   FitRoom AI — couche interface.
+   Règle de performance qui gouverne tout ce fichier : rien de coûteux
+   ne se superpose au miroir live. backdrop-filter est réservé aux
+   écrans où la caméra ne tourne pas (voir .glass, jamais dans #stage).
+   Les animations ne touchent que transform et opacity.
+   =================================================================== */
+:root{
+  --bg:#0B0A09; --bg2:#121110; --card:#1A1715; --card-2:#221D19;
+  --line:rgba(232,200,154,.13); --line-2:rgba(232,200,154,.24);
+  --gold:#E8C89A; --gold-2:#C9A063; --gold-dim:#8A7345;
+  --grad:linear-gradient(135deg,#EBD0A6 0%,#C9A063 100%);
+  --text:#F4EFE8; --muted:#989085; --live:#4ADE80; --alert:#E0765A;
+  --r-s:12px; --r-m:18px; --r-l:26px;
+  --sat:env(safe-area-inset-top); --sab:env(safe-area-inset-bottom);
+  --tab-h:calc(58px + env(safe-area-inset-bottom));
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden;overscroll-behavior:none}
+body{background:var(--bg);color:var(--text);
+  font-family:Inter,-apple-system,system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;font-size:15px;line-height:1.45}
+button,input,select{font:inherit;color:inherit}
+button{background:none;border:none;cursor:pointer}
+svg{display:block;flex:none}
+.tnum{font-variant-numeric:tabular-nums}
+
+/* ---------- écrans ---------- */
+#app{position:fixed;inset:0;display:flex;flex-direction:column}
+.screen{position:absolute;inset:0;bottom:var(--tab-h);
+  display:none;flex-direction:column;overflow-y:auto;overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;overflow-anchor:none}
+.screen[data-on]{display:flex}
+.screen.full{bottom:0}
+.pad{padding:calc(var(--sat) + 14px) 20px 28px}
+
+/* ---------- barre d'onglets ---------- */
+#tabbar{position:absolute;left:0;right:0;bottom:0;height:var(--tab-h);
+  padding-bottom:var(--sab);display:grid;grid-template-columns:repeat(5,1fr);
+  background:rgba(11,10,9,.92);border-top:1px solid var(--line);z-index:60}
+#tabbar.hide{display:none}
+.tab{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  color:var(--muted);font-size:10px;font-weight:500;letter-spacing:.01em;
+  transition:color .18s}
+.tab[aria-selected=true]{color:var(--gold)}
+.tab svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.7}
+
+/* ---------- accueil ---------- */
+#home{background:
+  radial-gradient(120% 70% at 50% 0%, #221B14 0%, rgba(11,10,9,0) 62%),
+  radial-gradient(90% 50% at 100% 100%, #1A1410 0%, rgba(11,10,9,0) 70%), var(--bg)}
+.brand{display:flex;flex-direction:column;align-items:center;gap:8px;margin:18px 0 30px}
+.brand h1{font-size:21px;font-weight:600;letter-spacing:.055em}
+.hero{font-size:38px;line-height:1.14;font-weight:700;letter-spacing:-.022em;margin-bottom:16px}
+.hero .g{background:var(--grad);-webkit-background-clip:text;background-clip:text;
+  -webkit-text-fill-color:transparent}
+.lede{color:var(--muted);font-size:15px;max-width:19em;margin-bottom:20px}
+.pill{display:inline-flex;align-items:center;gap:9px;padding:9px 16px;margin-bottom:26px;
+  border:1px solid var(--line-2);border-radius:999px;
+  font-size:11.5px;font-weight:600;letter-spacing:.13em;color:var(--gold)}
+.pill i{width:3px;height:3px;border-radius:50%;background:var(--gold-2);font-style:normal}
+
+.btn{display:flex;align-items:center;justify-content:center;gap:11px;width:100%;
+  padding:17px;border-radius:999px;font-size:16px;font-weight:600;letter-spacing:-.01em;
+  transition:transform .14s ease, opacity .14s}
+.btn:active{transform:scale(.975)}
+.btn-1{background:var(--grad);color:#1A1206;box-shadow:0 10px 30px -12px rgba(201,160,99,.55)}
+.btn-2{border:1px solid var(--line-2);color:var(--text)}
+.btn-3{border:1px solid var(--line-2);color:var(--gold)}
+.btn[disabled]{opacity:.42;pointer-events:none}
+.btn svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8}
+.stack{display:flex;flex-direction:column;gap:12px}
+
+.feats{display:grid;grid-template-columns:repeat(auto-fit,minmax(88px,1fr));gap:10px;margin-top:32px}
+.feat{display:flex;flex-direction:column;align-items:center;gap:7px;text-align:center;
+  padding:16px 8px;border:1px solid var(--line);border-radius:var(--r-m);background:rgba(26,23,21,.5)}
+.feat svg{width:24px;height:24px;stroke:var(--gold-2);fill:none;stroke-width:1.5}
+.feat b{font-size:11.5px;font-weight:600}
+.feat span{font-size:10px;color:var(--muted);line-height:1.35}
+
+/* ---------- cabine : le miroir ---------- */
+#cabine{background:#000}
+#stage{position:absolute;inset:0;overflow:hidden;background:#000;
+  display:flex;align-items:center;justify-content:center}
+/* En édition, l'ÉLÉMENT doit épouser l'image au pixel près : le moteur
+   convertit le toucher avec getBoundingClientRect en supposant que l'image
+   remplit sa boîte. object-fit y créerait des bandes vides, et chaque point
+   de calibration se poserait à côté de l'endroit visé.
+   En direct, plus aucun toucher à viser : on peut remplir l'écran. */
+#out{max-width:100%;max-height:100%;width:auto;height:auto;
+  display:block;touch-action:none}
+#stage.live #out{width:100%;height:100%;max-width:none;max-height:none;
+  object-fit:cover}
+#cam{position:absolute;left:0;top:0;width:2px;height:2px;opacity:.01;pointer-events:none}
+
+.hud{position:absolute;z-index:20;pointer-events:none}
+.hud>*{pointer-events:auto}
+#hudTop{top:0;left:0;right:0;padding:calc(var(--sat) + 10px) 14px 10px;
+  display:flex;align-items:center;gap:12px;
+  background:linear-gradient(180deg,rgba(0,0,0,.72),rgba(0,0,0,0))}
+.icobtn{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;
+  background:rgba(20,17,15,.66);border:1px solid var(--line);color:var(--text);
+  transition:transform .14s}
+.icobtn:active{transform:scale(.92)}
+.icobtn svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.8}
+.icobtn.on{color:var(--gold);border-color:var(--line-2)}
+.icobtn.on svg{fill:currentColor}
+#hudTitle{flex:1;text-align:center;display:flex;flex-direction:column;align-items:center;gap:5px}
+#hudTitle b{font-size:15px;font-weight:600;letter-spacing:.01em}
+#liveDot{display:none;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;
+  background:rgba(20,17,15,.7);border:1px solid var(--line);
+  font-size:9.5px;font-weight:700;letter-spacing:.11em;color:var(--live)}
+#liveDot.on{display:inline-flex}
+#liveDot i{width:5px;height:5px;border-radius:50%;background:var(--live);font-style:normal;
+  animation:pulse 2.4s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+/* rail latéral : Ajouter / Ajuster / Calibrer */
+#rail{right:12px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;
+  gap:4px;padding:7px;border-radius:var(--r-m);
+  background:rgba(20,17,15,.68);border:1px solid var(--line)}
+.rail-b{display:flex;flex-direction:column;align-items:center;gap:4px;width:54px;padding:9px 4px;
+  border-radius:var(--r-s);color:var(--text);font-size:9.5px;font-weight:500;
+  transition:background .16s}
+.rail-b:active{background:rgba(232,200,154,.12)}
+.rail-b svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.7}
+
+/* guidage */
+#hint{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:15;
+  max-width:78%;padding:13px 20px;border-radius:var(--r-l);text-align:center;
+  background:rgba(16,13,11,.82);border:1px solid var(--line);
+  font-size:14px;font-weight:500;line-height:1.4;
+  transition:opacity .45s ease;pointer-events:none}
+#hint.ok{border-color:rgba(74,222,128,.4);color:#BFF3D2}
+
+/* bas de cabine */
+#hudBottom{left:0;right:0;bottom:0;display:flex;flex-direction:column;gap:12px;
+  padding:16px 14px calc(var(--sab) + 10px);
+  background:linear-gradient(0deg,rgba(0,0,0,.82) 42%,rgba(0,0,0,0))}
+#shotRow{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.roundlbl{display:flex;flex-direction:column;align-items:center;gap:4px;width:62px;
+  color:var(--text);font-size:9.5px;font-weight:500}
+.roundlbl .c{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;
+  background:rgba(20,17,15,.68);border:1px solid var(--line);transition:transform .14s}
+.roundlbl:active .c{transform:scale(.92)}
+.roundlbl svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.7}
+#shutter{width:72px;height:72px;border-radius:50%;background:#fff;
+  border:4px solid rgba(255,255,255,.34);background-clip:padding-box;
+  box-shadow:0 0 0 2px rgba(0,0,0,.35);transition:transform .12s}
+#shutter:active{transform:scale(.9)}
+#shutter[disabled]{opacity:.4}
+
+/* dock des vêtements */
+#dock{border-radius:var(--r-m);border:1px solid var(--line);background:rgba(18,16,14,.8);
+  padding:11px 12px 12px}
+#dock.hide{display:none}
+.dock-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px}
+.dock-h b{font-size:12.5px;font-weight:600}
+.dock-h button{font-size:11.5px;color:var(--gold);font-weight:500}
+#dockList{display:flex;gap:9px;overflow-x:auto;scrollbar-width:none;
+  scroll-snap-type:x proximity;padding-bottom:2px}
+#dockList::-webkit-scrollbar{display:none}
+.thumb{flex:none;width:60px;height:60px;border-radius:var(--r-s);overflow:hidden;
+  border:1px solid var(--line);background:#15120F;scroll-snap-align:start;
+  display:grid;place-items:center;position:relative;transition:transform .14s}
+.thumb:active{transform:scale(.94)}
+.thumb img{width:100%;height:100%;object-fit:contain}
+.thumb[aria-pressed=true]{border-color:var(--gold-2);box-shadow:0 0 0 1px var(--gold-2)}
+.thumb.add{border-style:dashed;color:var(--muted)}
+.thumb.add svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8}
+
+/* barre de détourage, conservée du moteur */
+#cutbar{display:none;position:absolute;left:10px;right:10px;bottom:calc(var(--sab) + 12px);
+  z-index:30;gap:7px;flex-wrap:wrap;align-items:center;justify-content:center;
+  background:rgba(16,13,11,.94);border:1px solid var(--line);border-radius:var(--r-m);padding:10px}
+#cutbar button{padding:9px 13px;border-radius:999px;border:1px solid var(--line);
+  font-size:11.5px;font-weight:500}
+#cutbar button.go{background:var(--grad);color:#1A1206;border-color:transparent;font-weight:600}
+#cutbar label{display:flex;align-items:center;gap:7px;font-size:10.5px;color:var(--muted)}
+#cutbar input[type=range]{width:96px}
+
+/* overlay d'ouverture / erreur caméra */
+#start{position:absolute;inset:0;z-index:40;display:none;flex-direction:column;
+  align-items:center;justify-content:center;gap:18px;text-align:center;padding:30px;
+  background:#0B0A09}
+#start.on{display:flex}
+#start p{font-size:13.5px;color:var(--muted);max-width:19em;line-height:1.55}
+#start b{color:var(--text);font-weight:600}
+
+/* ---------- feuilles ---------- */
+#scrim{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.62);
+  opacity:0;pointer-events:none;transition:opacity .26s}
+#scrim.on{opacity:1;pointer-events:auto}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:80;max-height:88vh;
+  display:flex;flex-direction:column;
+  background:var(--bg2);border-top:1px solid var(--line-2);
+  border-radius:var(--r-l) var(--r-l) 0 0;
+  transform:translateY(102%);transition:transform .3s cubic-bezier(.32,.72,0,1);
+  padding-bottom:var(--sab)}
+.sheet.on{transform:translateY(0)}
+.sheet-h{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:18px 20px 12px;flex:none}
+.sheet-h b{font-size:16.5px;font-weight:600}
+.sheet-b{overflow-y:auto;padding:0 20px 22px;overscroll-behavior:contain}
+.grab{width:38px;height:4px;border-radius:2px;background:var(--line-2);margin:9px auto 0;flex:none}
+
+.row{display:flex;align-items:center;gap:14px;width:100%;padding:15px 16px;
+  border:1px solid var(--line);border-radius:var(--r-m);background:var(--card);
+  margin-bottom:10px;text-align:left;font-size:14.5px;font-weight:500;
+  transition:transform .14s}
+.row:active{transform:scale(.985)}
+.row svg{width:20px;height:20px;stroke:var(--gold-2);fill:none;stroke-width:1.7}
+.row .sub{display:block;font-size:11.5px;color:var(--muted);font-weight:400;margin-top:2px}
+
+h3{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--muted);margin:22px 0 11px}
+h3:first-child{margin-top:4px}
+.group{border:1px solid var(--line);border-radius:var(--r-m);background:var(--card);
+  padding:4px 15px}
+.fld{padding:13px 0;border-bottom:1px solid var(--line)}
+.fld:last-child{border-bottom:none}
+.fld label{display:flex;justify-content:space-between;align-items:baseline;
+  font-size:14px;margin-bottom:9px}
+.fld label span{font-size:13px;color:var(--gold);font-weight:600}
+input[type=range]{width:100%;height:3px;border-radius:2px;appearance:none;outline:none;
+  background:linear-gradient(90deg,var(--gold-2) var(--p,50%),rgba(232,200,154,.16) var(--p,50%))}
+input[type=range]::-webkit-slider-thumb{appearance:none;width:22px;height:22px;border-radius:50%;
+  background:#F0DDBE;box-shadow:0 2px 8px rgba(0,0,0,.5);cursor:pointer}
+input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;border:none;
+  background:#F0DDBE;box-shadow:0 2px 8px rgba(0,0,0,.5);cursor:pointer}
+
+.tog{display:flex;align-items:center;justify-content:space-between;gap:14px;
+  padding:14px 0;border-bottom:1px solid var(--line);font-size:14px}
+.tog:last-child{border-bottom:none}
+.tog input{appearance:none;width:47px;height:28px;border-radius:999px;flex:none;
+  background:rgba(255,255,255,.13);position:relative;cursor:pointer;transition:background .2s}
+.tog input::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;
+  border-radius:50%;background:#fff;transition:transform .2s cubic-bezier(.32,.72,0,1)}
+.tog input:checked{background:var(--grad)}
+.tog input:checked::after{transform:translateX(19px)}
+.tog input:disabled{opacity:.4;cursor:default}
+.tog .t{flex:1}
+.tog .t span{display:block;font-size:11.5px;color:var(--muted);margin-top:2px;line-height:1.35}
+
+.duo{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+.duo button{display:flex;align-items:center;justify-content:center;gap:8px;padding:14px;
+  border:1px solid var(--line);border-radius:var(--r-m);background:var(--card);
+  font-size:13.5px;font-weight:500}
+.duo button svg{width:17px;height:17px;stroke:var(--gold-2);fill:none;stroke-width:1.7}
+.link{display:flex;align-items:center;justify-content:space-between;width:100%;
+  padding:14px 0;font-size:14px}
+.link span{color:var(--muted);font-size:13px;display:flex;align-items:center;gap:6px}
+
+.kv{display:flex;justify-content:space-between;align-items:baseline;padding:11px 0;
+  border-bottom:1px solid var(--line);font-size:13.5px}
+.kv:last-child{border-bottom:none}
+.kv .k{color:var(--muted)}
+.kv .v{color:var(--gold);font-weight:600}
+.note{font-size:12px;line-height:1.55;color:var(--muted);margin-top:12px}
+.note b{color:var(--text);font-weight:600}
+
+/* ---------- calibration ---------- */
+#calibBox{text-align:center;padding:8px 0 4px}
+#calibArt{width:150px;height:150px;margin:0 auto 22px;position:relative;
+  display:grid;place-items:center}
+#calibArt .brk{position:absolute;inset:0}
+#calibArt .brk path{stroke:var(--gold-2);fill:none;stroke-width:1.6;opacity:.55}
+#calibArt .body{width:64px;height:64px;stroke:var(--gold);fill:none;stroke-width:1.5}
+#calibBox h4{font-size:19px;font-weight:600;margin-bottom:10px}
+#calibBox li{list-style:none;font-size:13.5px;color:var(--muted);margin-bottom:5px}
+#ring{width:132px;height:132px;margin:22px auto 10px;position:relative}
+#ring svg{transform:rotate(-90deg)}
+#ring circle{fill:none;stroke-width:7;stroke-linecap:round}
+#ring .bg{stroke:rgba(232,200,154,.12)}
+#ring .fg{stroke:var(--gold-2);transition:stroke-dashoffset .25s linear}
+#ringN{position:absolute;inset:0;display:grid;place-items:center;
+  font-size:27px;font-weight:700;letter-spacing:-.02em}
+#calibState{font-size:12.5px;color:var(--muted)}
+
+/* ---------- grilles dressing / looks ---------- */
+.chips{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;margin-bottom:16px;
+  padding-bottom:2px}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;padding:9px 17px;border-radius:999px;border:1px solid var(--line);
+  font-size:12.5px;font-weight:500;color:var(--muted);transition:all .16s}
+.chip[aria-pressed=true]{background:var(--grad);color:#1A1206;border-color:transparent;font-weight:600}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+.cell{position:relative;border-radius:var(--r-m);overflow:hidden;border:1px solid var(--line);
+  background:var(--card);aspect-ratio:3/4;display:grid;place-items:center;
+  transition:transform .14s}
+.cell:active{transform:scale(.97)}
+.cell img{width:100%;height:100%;object-fit:cover}
+.cell.contain img{object-fit:contain;padding:6px}
+.cell .fav{position:absolute;top:8px;right:8px;width:29px;height:29px;border-radius:50%;
+  display:grid;place-items:center;background:rgba(11,10,9,.62);border:1px solid var(--line)}
+.cell .fav svg{width:15px;height:15px;stroke:#fff;fill:none;stroke-width:1.9}
+.cell .fav[aria-pressed=true] svg{stroke:var(--gold);fill:var(--gold)}
+.cell .cap{position:absolute;left:0;right:0;bottom:0;padding:18px 9px 7px;
+  background:linear-gradient(0deg,rgba(0,0,0,.85),transparent);
+  font-size:11px;font-weight:500;text-align:left;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.empty{text-align:center;padding:56px 22px;color:var(--muted)}
+.empty svg{width:44px;height:44px;stroke:var(--gold-dim);fill:none;stroke-width:1.3;margin:0 auto 16px}
+.empty b{display:block;color:var(--text);font-size:16px;font-weight:600;margin-bottom:7px}
+.empty p{font-size:13px;line-height:1.5;max-width:22em;margin:0 auto 20px}
+.screen-h{display:flex;align-items:center;gap:14px;margin-bottom:20px}
+.screen-h b{font-size:18px;font-weight:600}
+.stick{position:sticky;bottom:0;padding:14px 0 4px;
+  background:linear-gradient(0deg,var(--bg) 62%,transparent)}
+
+/* vues et pastilles : ces éléments sont fabriqués par le moteur */
+.vw{display:flex;flex-direction:column;align-items:center;gap:5px;padding:16px 6px;
+  border:1px solid var(--line);border-radius:var(--r-m);background:var(--card);
+  color:var(--text);font-size:12.5px;font-weight:600;transition:transform .14s}
+.vw:active{transform:scale(.96)}
+.vw em{font-style:normal;font-size:10px;font-weight:400;color:var(--muted)}
+.vw[data-filled=true]{border-color:var(--line-2)}
+.vw[data-filled=true] em{color:var(--gold-2)}
+.vw[data-active=true]{border-color:var(--gold-2)}
+.sw{width:38px;height:38px;border-radius:50%;border:1px solid var(--line);
+  padding:0;transition:transform .14s}
+.sw:active{transform:scale(.9)}
+.sw[aria-pressed=true]{box-shadow:0 0 0 2px var(--bg2),0 0 0 4px var(--gold-2)}
+
+/* aperçu du look capturé */
+#shotImg{width:100%;border-radius:var(--r-m);border:1px solid var(--line);display:block;
+  max-height:46vh;object-fit:contain;background:#000;margin-bottom:16px}
+.quad{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+/* profil */
+.avatar{width:74px;height:74px;border-radius:50%;display:grid;place-items:center;
+  background:var(--card-2);border:1px solid var(--line-2);margin:0 auto 14px}
+.avatar svg{width:34px;height:34px;stroke:var(--gold-2);fill:none;stroke-width:1.4}
+
+/* Le flou n'apparaît que hors du miroir : au-dessus d'un canvas qui se
+   recompose trente fois par seconde, il coûte 10 à 20 % des images. */
+.glass{backdrop-filter:blur(22px) saturate(1.5);-webkit-backdrop-filter:blur(22px) saturate(1.5);
+  background:rgba(18,17,16,.72)}
+/* Ces deux feuilles se règlent en regardant le miroir : elles ne doivent
+   jamais le recouvrir entièrement, sinon on ajuste à l'aveugle. */
+#shAdjust{max-height:68vh}
+#shCalib{max-height:60vh}
+input[type=file]{display:none}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ============ ACCUEIL ============ -->
+  <section class="screen" id="home" data-screen="home">
+    <div class="pad">
+      <div class="brand">
+        <svg width="46" height="40" viewBox="0 0 46 40" fill="none" stroke="#C9A063" stroke-width="1.5">
+          <path d="M23 6.5c-2.2 0-4 1.6-4 3.6 0 1.5 1 2.8 2.4 3.3L23 14l1.6-.6"/>
+          <path d="M23 14 6 25.5c-1.3.9-.7 3 .9 3h32.2c1.6 0 2.2-2.1.9-3L23 14Z"/>
+          <path d="M37 6.5l1 2.6 2.6 1-2.6 1-1 2.6-1-2.6-2.6-1 2.6-1 1-2.6Z"/>
+        </svg>
+        <h1>FitRoom AI</h1>
+      </div>
+      <h2 class="hero">Votre cabine<br>d'essayage<br><span class="g">intelligente ✦</span></h2>
+      <p class="lede">Essayez vos vêtements directement avec votre caméra.</p>
+      <div class="pill">✦ LIVE <i></i> IA <i></i> RÉALISTE</div>
+      <div class="stack">
+        <button class="btn btn-1" id="goCabine">
+          <svg viewBox="0 0 24 24"><path d="M3 8.5A2.5 2.5 0 0 1 5.5 6h1.7a1 1 0 0 0 .8-.4l1-1.3a1 1 0 0 1 .8-.4h4.4a1 1 0 0 1 .8.4l1 1.3a1 1 0 0 0 .8.4h1.7A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5v-8Z"/><circle cx="12" cy="12" r="3.4"/></svg>
+          Ouvrir ma cabine
+        </button>
+        <button class="btn btn-2" id="goDressing2">
+          <svg viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><circle cx="8.5" cy="10" r="1.8"/><path d="m4 17 4.6-4.2a1.6 1.6 0 0 1 2.2 0L15 17"/><path d="m13.5 14 2-1.8a1.6 1.6 0 0 1 2.2 0L20 14.4"/></svg>
+          Mes vêtements
+        </button>
+      </div>
+      <div class="feats">
+        <div class="feat">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="2.6"/><path d="M12 1.8v3.4M12 18.8v3.4M22.2 12h-3.4M5.2 12H1.8"/></svg>
+          <b>Essayage LIVE</b><span>en temps réel</span></div>
+        <div class="feat">
+          <svg viewBox="0 0 24 24"><path d="M12 3.2 20 7.6v8.8L12 20.8 4 16.4V7.6L12 3.2Z"/><path d="M9.4 10.6h.01M14.6 10.6h.01M9.6 15c1.6-1.3 3.2-1.3 4.8 0"/></svg>
+          <b>IA intelligente</b><span>ajuste pour vous</span></div>
+        <div class="feat">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.4v2.6M12 19v2.6M21.6 12H19M5 12H2.4M18.8 5.2 17 7M7 17l-1.8 1.8M18.8 18.8 17 17M7 7 5.2 5.2"/></svg>
+          <b>Rendu réaliste</b><span>lumière &amp; occlusion</span></div>
+        <div class="feat">
+          <svg viewBox="0 0 24 24"><rect x="3.4" y="3.4" width="7.2" height="7.2" rx="1.6"/><rect x="13.4" y="3.4" width="7.2" height="7.2" rx="1.6"/><rect x="3.4" y="13.4" width="7.2" height="7.2" rx="1.6"/><rect x="13.4" y="13.4" width="7.2" height="7.2" rx="1.6"/></svg>
+          <b>Multi-vues</b><span>face, profil, dos</span></div>
+        <div class="feat">
+          <svg viewBox="0 0 24 24"><path d="M12 16V3.6M12 3.6 8 7.6M12 3.6l4 4"/><path d="M4.5 14v4.4A2.1 2.1 0 0 0 6.6 20.5h10.8a2.1 2.1 0 0 0 2.1-2.1V14"/></svg>
+          <b>Partage facile</b><span>en un clic</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CABINE ============ -->
+  <section class="screen full" id="cabine" data-screen="cabine">
+    <div id="stage">
+      <canvas id="out"></canvas>
+      <video id="cam" playsinline muted autoplay></video>
+
+      <div id="hint">Positionnez-vous face à la caméra</div>
+
+      <div class="hud" id="hudTop">
+        <button class="icobtn" id="cabBack" aria-label="Retour">
+          <svg viewBox="0 0 24 24"><path d="M15 5.5 8 12l7 6.5"/></svg></button>
+        <div id="hudTitle">
+          <b>Cabine LIVE ✦</b>
+          <span id="liveDot"><i></i>LIVE</span>
+        </div>
+        <button class="icobtn" id="cabFav" aria-pressed="false" aria-label="Favori">
+          <svg viewBox="0 0 24 24"><path d="M12 20s-7.2-4.5-7.2-9.4A4.1 4.1 0 0 1 12 8.1a4.1 4.1 0 0 1 7.2 2.5C19.2 15.5 12 20 12 20Z"/></svg></button>
+      </div>
+
+      <div class="hud" id="rail">
+        <button class="rail-b" id="railAdd">
+          <svg viewBox="0 0 24 24"><path d="M12 5.5v13M5.5 12h13"/></svg>Ajouter</button>
+        <button class="rail-b" id="railAdjust">
+          <svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h3M11 17h9"/><circle cx="16" cy="7" r="2.2"/><circle cx="9" cy="17" r="2.2"/></svg>Ajuster</button>
+        <button class="rail-b" id="railCalib">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="5.2" r="2.4"/><path d="M12 7.6v7M12 14.6 8.6 20M12 14.6 15.4 20M7.4 10.4h9.2"/></svg>Calibrer</button>
+      </div>
+
+      <div class="hud" id="hudBottom">
+        <div id="shotRow">
+          <button class="roundlbl" id="btnViews">
+            <span class="c"><svg viewBox="0 0 24 24"><path d="M12 3.2 20 7.6v8.8L12 20.8 4 16.4V7.6L12 3.2Z"/><path d="M4 7.6 12 12l8-4.4M12 12v8.8"/></svg></span>Vues</button>
+          <button id="shutter" aria-label="Capturer"></button>
+          <button class="roundlbl" id="btnLooks">
+            <span class="c"><svg viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><circle cx="8.5" cy="10" r="1.8"/><path d="m4 17 4.6-4.2a1.6 1.6 0 0 1 2.2 0L15 17"/></svg></span>Mes looks</button>
+        </div>
+        <div id="dock">
+          <div class="dock-h"><b>Mes vêtements</b><button id="dockAll">Tout</button></div>
+          <div id="dockList"></div>
+        </div>
+      </div>
+
+      <div id="cutbar">
+        <button data-cut="auto">Fond auto</button>
+        <button data-cut="reset">Tout garder</button>
+        <label>Tolérance<input type="range" id="tol" min="12" max="110" step="1" value="46"></label>
+        <button data-cut="ok" class="go">Valider</button>
+      </div>
+
+      <div id="start">
+        <button class="btn btn-1" id="btnStart" style="max-width:280px">
+          <svg viewBox="0 0 24 24"><path d="M3 8.5A2.5 2.5 0 0 1 5.5 6h1.7a1 1 0 0 0 .8-.4l1-1.3a1 1 0 0 1 .8-.4h4.4a1 1 0 0 1 .8.4l1 1.3a1 1 0 0 0 .8.4h1.7A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5v-8Z"/><circle cx="12" cy="12" r="3.4"/></svg>
+          Ouvrir ma cabine</button>
+        <p>Votre navigateur demande l'autorisation au premier appui, puis le modèle se télécharge une seule fois.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ VÊTEMENTS ============ -->
+  <section class="screen" id="dressing" data-screen="dressing">
+    <div class="pad">
+      <div class="screen-h"><b>Mes vêtements</b></div>
+      <div class="chips" id="chips">
+        <button class="chip" data-cat="tout" aria-pressed="true">Tout</button>
+        <button class="chip" data-cat="haut" aria-pressed="false">Hauts</button>
+        <button class="chip" data-cat="veste" aria-pressed="false">Vestes</button>
+      </div>
+      <div class="grid3" id="wardGrid"></div>
+      <div class="empty" id="wardEmpty">
+        <svg viewBox="0 0 24 24"><path d="M12 4.2c-1.7 0-3 1.2-3 2.7 0 1.1.7 2 1.8 2.5L12 10l1.2-.6"/><path d="M12 10 3.5 16.4c-1 .7-.5 2.2.7 2.2h15.6c1.2 0 1.7-1.5.7-2.2L12 10Z"/></svg>
+        <b>Votre dressing est vide</b>
+        <p>Photographiez un vêtement posé à plat ou importez-le depuis votre galerie. Il sera détouré puis calibré une seule fois.</p>
+        <button class="btn btn-1" id="wardAdd1" style="max-width:260px;margin:0 auto">Ajouter un vêtement</button>
+      </div>
+      <div class="stick" id="wardStick" hidden>
+        <button class="btn btn-1" id="wardAdd2">
+          <svg viewBox="0 0 24 24"><path d="M12 5.5v13M5.5 12h13"/></svg>Ajouter un vêtement</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ FAVORIS / LOOKS ============ -->
+  <section class="screen" id="looks" data-screen="looks">
+    <div class="pad">
+      <div class="screen-h"><b id="looksTitle">Mes looks</b></div>
+      <div class="grid2" id="looksGrid"></div>
+      <div class="empty" id="looksEmpty">
+        <svg viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><circle cx="8.5" cy="10" r="1.8"/><path d="m4 17 4.6-4.2a1.6 1.6 0 0 1 2.2 0L15 17"/></svg>
+        <b>Aucun look enregistré</b>
+        <p>Appuyez sur le déclencheur pendant un essayage pour garder une capture de votre tenue.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PROFIL ============ -->
+  <section class="screen" id="profil" data-screen="profil">
+    <div class="pad">
+      <div class="screen-h"><b>Profil</b></div>
+      <div class="avatar"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.8"/><path d="M4.6 20.2a7.6 7.6 0 0 1 14.8 0"/></svg></div>
+
+      <h3>Ma morphologie</h3>
+      <div class="group">
+        <div class="fld">
+          <label for="hCm">Votre taille <span id="vHCm">175 cm</span></label>
+          <input type="range" id="hCm" min="140" max="210" step="1" value="175">
+        </div>
+        <div class="fld">
+          <label style="margin-bottom:11px">Silhouette de référence</label>
+          <div class="duo" id="morpho" style="margin:0">
+            <button data-m="h" aria-pressed="true">Homme</button>
+            <button data-m="f" aria-pressed="false">Femme</button>
+          </div>
+        </div>
+      </div>
+
+      <h3>Ma taille conseillée</h3>
+      <div class="group">
+        <div class="kv"><span class="k">Échelle</span><span class="v" id="mScale">—</span></div>
+        <div class="kv"><span class="k">Carrure</span><span class="v" id="mShCm">—</span></div>
+        <div class="kv"><span class="k">Tour de poitrine</span><span class="v" id="mChest">—</span></div>
+        <div class="kv"><span class="k">Taille conseillée</span><span class="v" id="mSize">—</span></div>
+      </div>
+      <p class="note" id="sizeNote">Placez-vous de face, en pied, chevilles visibles. Sans les chevilles,
+        l'échelle est déduite de proportions moyennes et le résultat perd en fiabilité.</p>
+      <button class="btn btn-3" id="profMeasure" style="margin-top:14px">✦ Trouver ma taille</button>
+
+      <h3>Ma cabine</h3>
+      <button class="row" id="pShare"><svg viewBox="0 0 24 24"><path d="M12 16V3.6M12 3.6 8 7.6M12 3.6l4 4"/><path d="M4.5 14v4.4A2.1 2.1 0 0 0 6.6 20.5h10.8a2.1 2.1 0 0 0 2.1-2.1V14"/></svg>
+        <span>Partager la cabine<span class="sub">Envoyer le lien de FitRoom AI</span></span></button>
+      <button class="row" id="pExport"><svg viewBox="0 0 24 24"><path d="M12 3.6v12.8M12 16.4l-4-4M12 16.4l4-4"/><path d="M4.5 17.4v1.2a1.9 1.9 0 0 0 1.9 1.9h11.2a1.9 1.9 0 0 0 1.9-1.9v-1.2"/></svg>
+        <span>Exporter le vêtement<span class="sub">Photos détourées et points de calibration</span></span></button>
+      <button class="row" id="pImport"><svg viewBox="0 0 24 24"><path d="M12 16.4V3.6M12 3.6 8 7.6M12 3.6l4 4"/><path d="M4.5 17.4v1.2a1.9 1.9 0 0 0 1.9 1.9h11.2a1.9 1.9 0 0 0 1.9-1.9v-1.2"/></svg>
+        <span>Importer un vêtement<span class="sub">Depuis un fichier reçu</span></span></button>
+      <button class="row" id="p3d"><svg viewBox="0 0 24 24"><path d="M12 3.2 20 7.6v8.8L12 20.8 4 16.4V7.6L12 3.2Z"/><path d="M4 7.6 12 12l8-4.4M12 12v8.8"/></svg>
+        <span>Créer l'avatar 3D<span class="sub">Volume approché depuis vos proportions</span></span></button>
+
+      <h3>Diagnostic</h3>
+      <div class="group">
+        <div class="kv"><span class="k">Images / seconde</span><span class="v tnum" id="mFps">—</span></div>
+        <div class="kv"><span class="k">Largeur d'épaules</span><span class="v tnum" id="mShoulder">—</span></div>
+        <div class="kv"><span class="k">Longueur du buste</span><span class="v tnum" id="mTorso">—</span></div>
+        <div class="kv"><span class="k">Inclinaison</span><span class="v tnum" id="mAngle">—</span></div>
+        <div class="kv"><span class="k">Vue · rotation</span><span class="v tnum" id="mView">—</span></div>
+        <div class="kv"><span class="k">Manches</span><span class="v tnum" id="mSleeve">—</span></div>
+      </div>
+      <p class="note" id="installNote">Pour l'installer en app : bouton Partager du navigateur,
+        puis <b>Sur l'écran d'accueil</b>.</p>
+      <p class="note">Le vêtement est ancré sur ses propres coutures d'épaules, étiré sur votre buste,
+        déformé sur trois points, éclairé par la lumière de la pièce, et masqué là où votre peau passe
+        devant. <b>Sa limite</b> : votre vrai vêtement reste dessous.</p>
+    </div>
+  </section>
+
+  <nav id="tabbar">
+    <button class="tab" data-go="home" aria-selected="true">
+      <svg viewBox="0 0 24 24"><path d="M3.6 10.4 12 3.8l8.4 6.6V19a1.6 1.6 0 0 1-1.6 1.6H5.2A1.6 1.6 0 0 1 3.6 19v-8.6Z"/></svg>Accueil</button>
+    <button class="tab" data-go="cabine" aria-selected="false">
+      <svg viewBox="0 0 24 24"><path d="M3 8.5A2.5 2.5 0 0 1 5.5 6h1.7a1 1 0 0 0 .8-.4l1-1.3a1 1 0 0 1 .8-.4h4.4a1 1 0 0 1 .8.4l1 1.3a1 1 0 0 0 .8.4h1.7A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5v-8Z"/><circle cx="12" cy="12" r="3.4"/></svg>Cabine</button>
+    <button class="tab" data-go="dressing" aria-selected="false">
+      <svg viewBox="0 0 24 24"><path d="M12 4.2c-1.7 0-3 1.2-3 2.7 0 1.1.7 2 1.8 2.5L12 10l1.2-.6"/><path d="M12 10 3.5 16.4c-1 .7-.5 2.2.7 2.2h15.6c1.2 0 1.7-1.5.7-2.2L12 10Z"/></svg>Vêtements</button>
+    <button class="tab" data-go="looks" aria-selected="false">
+      <svg viewBox="0 0 24 24"><path d="m12 4.4 2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4-3.9-3.8 5.4-.8L12 4.4Z"/></svg>Favoris</button>
+    <button class="tab" data-go="profil" aria-selected="false">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.8"/><path d="M4.6 20.2a7.6 7.6 0 0 1 14.8 0"/></svg>Profil</button>
+  </nav>
+</div>
+
+<div id="scrim"></div>
+
+<!-- ============ FEUILLE : AJOUTER ============ -->
+<div class="sheet" id="shAdd">
+  <div class="grab"></div>
+  <div class="sheet-h"><b>Ajouter un vêtement</b>
+    <button class="icobtn" data-close><svg viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>
+  <div class="sheet-b">
+    <button class="row" id="addShoot"><svg viewBox="0 0 24 24"><path d="M3 8.5A2.5 2.5 0 0 1 5.5 6h1.7a1 1 0 0 0 .8-.4l1-1.3a1 1 0 0 1 .8-.4h4.4a1 1 0 0 1 .8.4l1 1.3a1 1 0 0 0 .8.4h1.7A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5v-8Z"/><circle cx="12" cy="12" r="3.4"/></svg>
+      <span>Photographier<span class="sub">Posez le vêtement à plat, bien éclairé</span></span></button>
+    <button class="row" id="addGallery"><svg viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><circle cx="8.5" cy="10" r="1.8"/><path d="m4 17 4.6-4.2a1.6 1.6 0 0 1 2.2 0L15 17"/></svg>
+      <span>Importer depuis la galerie<span class="sub">Une photo déjà prise</span></span></button>
+    <button class="row" id="addWard"><svg viewBox="0 0 24 24"><path d="M12 4.2c-1.7 0-3 1.2-3 2.7 0 1.1.7 2 1.8 2.5L12 10l1.2-.6"/><path d="M12 10 3.5 16.4c-1 .7-.5 2.2.7 2.2h15.6c1.2 0 1.7-1.5.7-2.2L12 10Z"/></svg>
+      <span>Mes vêtements<span class="sub">Reprendre un vêtement déjà détouré</span></span></button>
+    <button class="row" id="addShared"><svg viewBox="0 0 24 24"><path d="M12 16.4V3.6M12 3.6 8 7.6M12 3.6l4 4"/><path d="M4.5 17.4v1.2a1.9 1.9 0 0 0 1.9 1.9h11.2a1.9 1.9 0 0 0 1.9-1.9v-1.2"/></svg>
+      <span>Importer un vêtement partagé<span class="sub">Fichier reçu de quelqu'un d'autre</span></span></button>
+    <p class="note">✦ <b>Analyse du vêtement</b> — le fond est retiré par un modèle de segmentation
+      qui tourne sur votre appareil. Aucune photo ne quitte le téléphone.</p>
+  </div>
+</div>
+
+<!-- ============ FEUILLE : AJUSTER ============ -->
+<div class="sheet" id="shAdjust">
+  <div class="grab"></div>
+  <div class="sheet-h"><b>Ajuster le vêtement</b>
+    <button class="icobtn" data-close><svg viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>
+  <div class="sheet-b">
+    <h3>Coupe</h3>
+    <div class="group">
+      <div class="fld"><label for="sWidth">Carrure <span id="vWidth">50 %</span></label>
+        <input type="range" id="sWidth" min="0.8" max="1.6" step="0.01" value="1.05"></div>
+      <div class="fld"><label for="sLength">Longueur <span id="vLength">50 %</span></label>
+        <input type="range" id="sLength" min="0.8" max="2" step="0.01" value="1.25"></div>
+      <div class="fld"><label for="sOffset">Hauteur du col <span id="vOffset">50 %</span></label>
+        <input type="range" id="sOffset" min="-0.3" max="0.3" step="0.01" value="0.02"></div>
+    </div>
+
+    <h3>Rendu</h3>
+    <div class="group">
+      <div class="fld"><label for="sShade">Lumière <span id="vShade">70 %</span></label>
+        <input type="range" id="sShade" min="0" max="1" step="0.01" value="0.7"></div>
+      <div class="fld"><label for="sSmooth">Lissage <span id="vSmooth">50 %</span></label>
+        <input type="range" id="sSmooth" min="0.05" max="0.9" step="0.01" value="0.45"></div>
+      <div class="fld"><label for="sOpacity">Opacité <span id="vOpacity">100 %</span></label>
+        <input type="range" id="sOpacity" min="0.2" max="1" step="0.01" value="1"></div>
+    </div>
+
+    <h3>Corps</h3>
+    <div class="duo">
+      <button id="adjCalib"><svg viewBox="0 0 24 24"><circle cx="12" cy="5.2" r="2.4"/><path d="M12 7.6v7M12 14.6 8.6 20M12 14.6 15.4 20M7.4 10.4h9.2"/></svg>Calibration</button>
+      <button id="btnRecal"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 4v4.6h-4.6"/></svg>Recalibrer</button>
+    </div>
+    <button class="link" id="adjMeasures">Mesures <span>Voir mes mesures
+      <svg viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" fill="none" stroke-width="1.9"><path d="m9.5 6 6 6-6 6"/></svg></span></button>
+
+    <h3>Tracking</h3>
+    <div class="group">
+      <label class="tog"><span class="t">Manches articulées
+        <span>Chaque manche suit son segment épaule → coude, sur la vue de face.</span></span>
+        <input type="checkbox" id="cSleeves" checked></label>
+      <label class="tog"><span class="t">Occlusion par la peau
+        <span id="occNote">Le tissu passe derrière les bras et le cou. Coûte quelques images par seconde.</span></span>
+        <input type="checkbox" id="cOcclusion" checked></label>
+      <label class="tog"><span class="t">Afficher le squelette</span>
+        <input type="checkbox" id="cSkeleton"></label>
+      <label class="tog"><span class="t">Afficher le vêtement</span>
+        <input type="checkbox" id="cGarment" checked></label>
+    </div>
+
+    <button class="btn btn-3" id="adjReset" style="margin-top:18px">Réinitialiser les réglages</button>
+  </div>
+</div>
+
+<!-- ============ FEUILLE : CALIBRER ============ -->
+<div class="sheet" id="shCalib">
+  <div class="grab"></div>
+  <div class="sheet-h"><b>Calibrer mon corps</b>
+    <button class="icobtn" data-close><svg viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>
+  <div class="sheet-b">
+    <div id="calibBox">
+      <div id="calibArt">
+        <svg class="brk" viewBox="0 0 150 150"><path d="M4 34V10a6 6 0 0 1 6-6h24M146 34V10a6 6 0 0 0-6-6h-24M4 116v24a6 6 0 0 0 6 6h24M146 116v24a6 6 0 0 1-6 6h-24"/></svg>
+        <svg class="body" viewBox="0 0 24 24"><circle cx="12" cy="4.6" r="2.6"/><path d="M12 7.2v8.4M12 15.6 8.4 22M12 15.6 15.6 22M6.6 10h10.8"/></svg>
+      </div>
+      <h4 id="calibH">Tenez-vous face à la caméra</h4>
+      <ul><li>Gardez vos chevilles visibles</li><li>Restez immobile 3 secondes</li></ul>
+      <div id="ring" hidden>
+        <svg viewBox="0 0 132 132" width="132" height="132">
+          <circle class="bg" cx="66" cy="66" r="60"></circle>
+          <circle class="fg" cx="66" cy="66" r="60" stroke-dasharray="377" stroke-dashoffset="377"></circle>
+        </svg>
+        <div id="ringN">0 %</div>
+      </div>
+      <p id="calibState" hidden>Calibration en cours…</p>
+    </div>
+    <button class="btn btn-1" id="btnMeasure" style="margin-top:20px">Calibrer mon corps</button>
+    <div class="group" style="margin-top:18px">
+      <div class="kv"><span class="k">Échelle</span><span class="v" id="mScale2">—</span></div>
+      <div class="kv"><span class="k">Carrure</span><span class="v" id="mShCm2">—</span></div>
+      <div class="kv"><span class="k">Tour de poitrine</span><span class="v" id="mChest2">—</span></div>
+      <div class="kv"><span class="k">Taille conseillée</span><span class="v" id="mSize2">—</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ FEUILLE : VUES ============ -->
+<div class="sheet" id="shViews">
+  <div class="grab"></div>
+  <div class="sheet-h"><b>Vues du vêtement</b>
+    <button class="icobtn" data-close><svg viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>
+  <div class="sheet-b">
+    <p class="note" style="margin:0 0 14px">La bascule est automatique : elle suit votre rotation réelle
+      devant la caméra. Ajoutez une photo par orientation pour que le vêtement reste juste quand vous tournez.</p>
+    <div id="views" class="grid3"></div>
+    <h3>Couleur du t-shirt de démonstration</h3>
+    <div id="swatches" style="display:flex;gap:10px;flex-wrap:wrap"></div>
+  </div>
+</div>
+
+<!-- ============ FEUILLE : LOOK CAPTURÉ ============ -->
+<div class="sheet" id="shShot">
+  <div class="grab"></div>
+  <div class="sheet-h"><b>Votre look ✦</b>
+    <button class="icobtn" data-close><svg viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>
+  <div class="sheet-b">
+    <img id="shotImg" alt="Capture de votre essayage">
+    <div class="quad">
+      <button class="row" id="shotFav" style="margin:0"><svg viewBox="0 0 24 24"><path d="M12 20s-7.2-4.5-7.2-9.4A4.1 4.1 0 0 1 12 8.1a4.1 4.1 0 0 1 7.2 2.5C19.2 15.5 12 20 12 20Z"/></svg>Favori</button>
+      <button class="row" id="shotShare" style="margin:0"><svg viewBox="0 0 24 24"><path d="M12 16V3.6M12 3.6 8 7.6M12 3.6l4 4"/><path d="M4.5 14v4.4A2.1 2.1 0 0 0 6.6 20.5h10.8a2.1 2.1 0 0 0 2.1-2.1V14"/></svg>Partager</button>
+      <button class="row" id="shotSave" style="margin:0"><svg viewBox="0 0 24 24"><path d="M12 3.6v12.8M12 16.4l-4-4M12 16.4l4-4"/><path d="M4.5 17.4v1.2a1.9 1.9 0 0 0 1.9 1.9h11.2a1.9 1.9 0 0 0 1.9-1.9v-1.2"/></svg>Enregistrer</button>
+      <button class="row" id="shotBack" style="margin:0"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 4v4.6h-4.6"/></svg>Continuer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ FEUILLE : LOOK OUVERT ============ -->
+<div class="sheet glass" id="shLook">
+  <div class="grab"></div>
+  <div class="sheet-h"><b>Look</b>
+    <button class="icobtn" data-close><svg viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>
+  <div class="sheet-b">
+    <img id="lookImg" alt="Look enregistré">
+    <div class="quad">
+      <button class="row" id="lookFav" style="margin:0"><svg viewBox="0 0 24 24"><path d="M12 20s-7.2-4.5-7.2-9.4A4.1 4.1 0 0 1 12 8.1a4.1 4.1 0 0 1 7.2 2.5C19.2 15.5 12 20 12 20Z"/></svg>Favori</button>
+      <button class="row" id="lookShare" style="margin:0"><svg viewBox="0 0 24 24"><path d="M12 16V3.6M12 3.6 8 7.6M12 3.6l4 4"/><path d="M4.5 14v4.4A2.1 2.1 0 0 0 6.6 20.5h10.8a2.1 2.1 0 0 0 2.1-2.1V14"/></svg>Partager</button>
+      <button class="row" id="lookRetry" style="margin:0"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 4v4.6h-4.6"/></svg>Réessayer</button>
+      <button class="row" id="lookDel" style="margin:0"><svg viewBox="0 0 24 24"><path d="M5.5 7h13M9.5 7V5.2A1.2 1.2 0 0 1 10.7 4h2.6a1.2 1.2 0 0 1 1.2 1.2V7M7.2 7l.8 12a1.4 1.4 0 0 0 1.4 1.3h5.2a1.4 1.4 0 0 0 1.4-1.3l.8-12"/></svg>Supprimer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ FEUILLE : ARTICLE DU DRESSING ============ -->
+<div class="sheet glass" id="shItem">
+  <div class="grab"></div>
+  <div class="sheet-h"><b id="itemName">Vêtement</b>
+    <button class="icobtn" data-close><svg viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>
+  <div class="sheet-b">
+    <img id="itemImg" alt="" style="width:100%;max-height:34vh;object-fit:contain;background:#15120F;border-radius:18px;border:1px solid var(--line);margin-bottom:16px">
+    <div class="group">
+      <div class="kv"><span class="k">Catégorie</span><span class="v" id="itemCat">—</span></div>
+      <div class="kv"><span class="k">Ajouté le</span><span class="v" id="itemDate">—</span></div>
+      <div class="kv"><span class="k">Vues calibrées</span><span class="v" id="itemViews">—</span></div>
+    </div>
+    <p class="note" id="itemWarn" hidden></p>
+    <button class="btn btn-1" id="itemWear" style="margin-top:16px">Essayer maintenant</button>
+    <div class="duo" style="margin-top:10px">
+      <button id="itemFav">Favori</button>
+      <button id="itemDel">Supprimer</button>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="file" accept="image/*" />
+<input type="file" id="fileShoot" accept="image/*" capture="environment" />
+<input type="file" id="fileJson" accept="application/json,.json" />
+<div id="status" hidden></div>
+<div id="btnShot" hidden></div>
+<div id="btnShare" hidden></div>
+<div id="btnExport" hidden></div>
+<div id="btnImport" hidden></div>
+<div id="btn3d" hidden></div>
+
+<script type="module">
+/*__ENGINE__*/
+/*__UI__*/
+</script>
+</body>
+</html>

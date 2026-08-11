@@ -1,0 +1,14 @@
+# core.autocrlf est actif sur cette machine. Sans ces règles, git pourrait
+# réécrire les fins de ligne à l'intérieur des PNG et les corrompre.
+*.png   binary
+*.jpg   binary
+*.ico   binary
+
+# Le reste est du texte, normalisé en LF dans le dépôt.
+*.html  text eol=lf
+*.js    text eol=lf
+*.mjs   text eol=lf
+*.py    text eol=lf
+*.json  text eol=lf
+*.webmanifest text eol=lf
+*.md    text eol=lf

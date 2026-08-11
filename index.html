@@ -2,258 +2,808 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Cabine — essayage virtuel</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+<title>FitRoom AI — cabine d'essayage intelligente</title>
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#14110F">
+<meta name="theme-color" content="#0B0A09">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Cabine">
+<meta name="apple-mobile-web-app-title" content="FitRoom AI">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,400&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-  :root{
-    --ink:#14110F; --panel:#1C1815; --line:#332C25;
-    --brass:#C8A45C; --brass-dim:#8A7440;
-    --paper:#EDE6DA; --muted:#968B7D; --alert:#C4664A;
-  }
-  *{box-sizing:border-box;margin:0;padding:0}
-  html,body{height:100%}
-  body{background:var(--ink);color:var(--paper);font-family:'Inter',system-ui,sans-serif;
-       -webkit-font-smoothing:antialiased;display:flex;flex-direction:column}
+/* ===================================================================
+   FitRoom AI — couche interface.
+   Règle de performance qui gouverne tout ce fichier : rien de coûteux
+   ne se superpose au miroir live. backdrop-filter est réservé aux
+   écrans où la caméra ne tourne pas (voir .glass, jamais dans #stage).
+   Les animations ne touchent que transform et opacity.
+   =================================================================== */
+:root{
+  --bg:#0B0A09; --bg2:#121110; --card:#1A1715; --card-2:#221D19;
+  --line:rgba(232,200,154,.13); --line-2:rgba(232,200,154,.24);
+  --gold:#E8C89A; --gold-2:#C9A063; --gold-dim:#8A7345;
+  --grad:linear-gradient(135deg,#EBD0A6 0%,#C9A063 100%);
+  --text:#F4EFE8; --muted:#989085; --live:#4ADE80; --alert:#E0765A;
+  --r-s:12px; --r-m:18px; --r-l:26px;
+  --sat:env(safe-area-inset-top); --sab:env(safe-area-inset-bottom);
+  --tab-h:calc(58px + env(safe-area-inset-bottom));
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden;overscroll-behavior:none}
+body{background:var(--bg);color:var(--text);
+  font-family:Inter,-apple-system,system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;font-size:15px;line-height:1.45}
+button,input,select{font:inherit;color:inherit}
+button{background:none;border:none;cursor:pointer}
+svg{display:block;flex:none}
+.tnum{font-variant-numeric:tabular-nums}
 
-  header{display:flex;align-items:baseline;gap:14px;padding:12px 18px;
-         border-bottom:1px solid var(--line);flex-wrap:wrap}
-  h1{font-family:'Bodoni Moda',serif;font-weight:400;font-size:24px}
-  .sub{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.14em;
-       text-transform:uppercase;color:var(--muted)}
-  .status{margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--brass)}
+/* ---------- écrans ---------- */
+#app{position:fixed;inset:0;display:flex;flex-direction:column}
+.screen{position:absolute;inset:0;bottom:var(--tab-h);
+  display:none;flex-direction:column;overflow-y:auto;overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;overflow-anchor:none}
+.screen[data-on]{display:flex}
+.screen.full{bottom:0}
+.pad{padding:calc(var(--sat) + 14px) 20px 28px}
 
-  main{flex:1;display:grid;grid-template-columns:1fr 300px;min-height:0}
-  @media (max-width:820px){ main{grid-template-columns:1fr;grid-template-rows:minmax(52vh,1fr) auto} }
+/* ---------- barre d'onglets ---------- */
+#tabbar{position:absolute;left:0;right:0;bottom:0;height:var(--tab-h);
+  padding-bottom:var(--sab);display:grid;grid-template-columns:repeat(5,1fr);
+  background:rgba(11,10,9,.92);border-top:1px solid var(--line);z-index:60}
+#tabbar.hide{display:none}
+.tab{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  color:var(--muted);font-size:10px;font-weight:500;letter-spacing:.01em;
+  transition:color .18s}
+.tab[aria-selected=true]{color:var(--gold)}
+.tab svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.7}
 
-  #stage{position:relative;display:flex;align-items:center;justify-content:center;
-         background:radial-gradient(120% 90% at 50% 0%, #201B17 0%, #100E0C 70%);
-         overflow:hidden;min-height:0}
-  #out{max-width:100%;max-height:100%;display:block}
-  #stage::after{content:"";position:absolute;inset:8px;
-                border:1px solid rgba(200,164,92,.16);pointer-events:none}
-  #hint{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);
-        font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;
-        text-transform:uppercase;color:var(--muted);background:rgba(16,14,12,.85);
-        padding:7px 12px;border:1px solid var(--line);text-align:center;max-width:88%;
-        transition:opacity .4s}
-  #start{position:absolute;inset:0;z-index:3;display:flex;flex-direction:column;
-         align-items:center;justify-content:center;gap:16px;text-align:center;padding:24px;
-         background:rgba(16,14,12,.94)}
-  #start p{font-size:12.5px;color:var(--muted);max-width:300px;line-height:1.6}
-  #start button{padding:14px 30px;background:var(--brass);color:#14110F;border:none;
-                cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:12px;
-                letter-spacing:.14em;text-transform:uppercase;font-weight:500}
-  #cutbar{display:none;position:absolute;left:8px;right:8px;bottom:8px;z-index:4;
-          gap:6px;flex-wrap:wrap;align-items:center;justify-content:center;
-          background:rgba(16,14,12,.94);border:1px solid var(--line);padding:8px}
-  #cutbar button{padding:9px 12px;background:transparent;color:var(--paper);
-          border:1px solid var(--line);cursor:pointer;font-family:'IBM Plex Mono',monospace;
-          font-size:10px;letter-spacing:.1em;text-transform:uppercase}
-  #cutbar button.go{background:var(--brass);color:#14110F;border-color:var(--brass);font-weight:500}
-  #cutbar label{display:flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;
-          font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
-  #cutbar input[type=range]{width:90px}
+/* ---------- accueil ---------- */
+#home{background:
+  radial-gradient(120% 70% at 50% 0%, #221B14 0%, rgba(11,10,9,0) 62%),
+  radial-gradient(90% 50% at 100% 100%, #1A1410 0%, rgba(11,10,9,0) 70%), var(--bg)}
+.brand{display:flex;flex-direction:column;align-items:center;gap:8px;margin:18px 0 30px}
+.brand h1{font-size:21px;font-weight:600;letter-spacing:.055em}
+.hero{font-size:38px;line-height:1.14;font-weight:700;letter-spacing:-.022em;margin-bottom:16px}
+.hero .g{background:var(--grad);-webkit-background-clip:text;background-clip:text;
+  -webkit-text-fill-color:transparent}
+.lede{color:var(--muted);font-size:15px;max-width:19em;margin-bottom:20px}
+.pill{display:inline-flex;align-items:center;gap:9px;padding:9px 16px;margin-bottom:26px;
+  border:1px solid var(--line-2);border-radius:999px;
+  font-size:11.5px;font-weight:600;letter-spacing:.13em;color:var(--gold)}
+.pill i{width:3px;height:3px;border-radius:50%;background:var(--gold-2);font-style:normal}
 
-  #cam{position:absolute;left:0;top:0;width:2px;height:2px;opacity:.01;pointer-events:none}
+.btn{display:flex;align-items:center;justify-content:center;gap:11px;width:100%;
+  padding:17px;border-radius:999px;font-size:16px;font-weight:600;letter-spacing:-.01em;
+  transition:transform .14s ease, opacity .14s}
+.btn:active{transform:scale(.975)}
+.btn-1{background:var(--grad);color:#1A1206;box-shadow:0 10px 30px -12px rgba(201,160,99,.55)}
+.btn-2{border:1px solid var(--line-2);color:var(--text)}
+.btn-3{border:1px solid var(--line-2);color:var(--gold)}
+.btn[disabled]{opacity:.42;pointer-events:none}
+.btn svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8}
+.stack{display:flex;flex-direction:column;gap:12px}
 
-  aside{border-left:1px solid var(--line);background:var(--panel);overflow-y:auto;padding:16px 16px 30px}
-  @media (max-width:820px){ aside{border-left:none;border-top:1px solid var(--line)} }
+.feats{display:grid;grid-template-columns:repeat(auto-fit,minmax(88px,1fr));gap:10px;margin-top:32px}
+.feat{display:flex;flex-direction:column;align-items:center;gap:7px;text-align:center;
+  padding:16px 8px;border:1px solid var(--line);border-radius:var(--r-m);background:rgba(26,23,21,.5)}
+.feat svg{width:24px;height:24px;stroke:var(--gold-2);fill:none;stroke-width:1.5}
+.feat b{font-size:11.5px;font-weight:600}
+.feat span{font-size:10px;color:var(--muted);line-height:1.35}
 
-  .measures{border:1px solid var(--line);margin-bottom:20px}
-  .measures .row{display:flex;justify-content:space-between;align-items:baseline;
-                 padding:8px 12px;border-bottom:1px solid var(--line)}
-  .measures .row:last-child{border-bottom:none}
-  .measures .k{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.12em;
-               text-transform:uppercase;color:var(--muted)}
-  .measures .v{font-family:'IBM Plex Mono',monospace;font-size:14px;color:var(--brass);
-               font-variant-numeric:tabular-nums}
+/* ---------- cabine : le miroir ---------- */
+#cabine{background:#000}
+#stage{position:absolute;inset:0;overflow:hidden;background:#000;
+  display:flex;align-items:center;justify-content:center}
+/* En édition, l'ÉLÉMENT doit épouser l'image au pixel près : le moteur
+   convertit le toucher avec getBoundingClientRect en supposant que l'image
+   remplit sa boîte. object-fit y créerait des bandes vides, et chaque point
+   de calibration se poserait à côté de l'endroit visé.
+   En direct, plus aucun toucher à viser : on peut remplir l'écran. */
+#out{max-width:100%;max-height:100%;width:auto;height:auto;
+  display:block;touch-action:none}
+#stage.live #out{width:100%;height:100%;max-width:none;max-height:none;
+  object-fit:cover}
+#cam{position:absolute;left:0;top:0;width:2px;height:2px;opacity:.01;pointer-events:none}
 
-  h2{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.16em;
-     text-transform:uppercase;color:var(--muted);margin:0 0 12px;
-     padding-bottom:6px;border-bottom:1px solid var(--line)}
-  .field{margin-bottom:13px}
-  .field label{display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px}
-  .field label span{font-family:'IBM Plex Mono',monospace;color:var(--brass-dim);
-                    font-variant-numeric:tabular-nums}
-  input[type=range]{width:100%;height:2px;background:var(--line);appearance:none;outline:none}
-  input[type=range]::-webkit-slider-thumb{appearance:none;width:15px;height:15px;
-    background:var(--brass);border-radius:50%;cursor:pointer}
-  input[type=range]::-moz-range-thumb{width:15px;height:15px;background:var(--brass);
-    border:none;border-radius:50%;cursor:pointer}
-  input[type=range]:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 3px rgba(200,164,92,.35)}
+.hud{position:absolute;z-index:20;pointer-events:none}
+.hud>*{pointer-events:auto}
+#hudTop{top:0;left:0;right:0;padding:calc(var(--sat) + 10px) 14px 10px;
+  display:flex;align-items:center;gap:12px;
+  background:linear-gradient(180deg,rgba(0,0,0,.72),rgba(0,0,0,0))}
+.icobtn{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;
+  background:rgba(20,17,15,.66);border:1px solid var(--line);color:var(--text);
+  transition:transform .14s}
+.icobtn:active{transform:scale(.92)}
+.icobtn svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.8}
+.icobtn.on{color:var(--gold);border-color:var(--line-2)}
+.icobtn.on svg{fill:currentColor}
+#hudTitle{flex:1;text-align:center;display:flex;flex-direction:column;align-items:center;gap:5px}
+#hudTitle b{font-size:15px;font-weight:600;letter-spacing:.01em}
+#liveDot{display:none;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;
+  background:rgba(20,17,15,.7);border:1px solid var(--line);
+  font-size:9.5px;font-weight:700;letter-spacing:.11em;color:var(--live)}
+#liveDot.on{display:inline-flex}
+#liveDot i{width:5px;height:5px;border-radius:50%;background:var(--live);font-style:normal;
+  animation:pulse 2.4s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
 
-  .seg{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}
-  .seg button{padding:9px;background:transparent;color:var(--paper);border:1px solid var(--line);
-    cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:10px;
-    letter-spacing:.1em;text-transform:uppercase}
-  .seg button[aria-pressed=true]{border-color:var(--brass);color:var(--brass)}
+/* rail latéral : Ajouter / Ajuster / Calibrer */
+#rail{right:12px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;
+  gap:4px;padding:7px;border-radius:var(--r-m);
+  background:rgba(20,17,15,.68);border:1px solid var(--line)}
+.rail-b{display:flex;flex-direction:column;align-items:center;gap:4px;width:54px;padding:9px 4px;
+  border-radius:var(--r-s);color:var(--text);font-size:9.5px;font-weight:500;
+  transition:background .16s}
+.rail-b:active{background:rgba(232,200,154,.12)}
+.rail-b svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.7}
 
-  .swatches{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
-  .sw{width:30px;height:30px;border:1px solid var(--line);cursor:pointer;padding:0}
-  .sw[aria-pressed=true]{outline:2px solid var(--brass);outline-offset:2px}
-  .sw:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+/* guidage */
+#hint{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:15;
+  max-width:78%;padding:13px 20px;border-radius:var(--r-l);text-align:center;
+  background:rgba(16,13,11,.82);border:1px solid var(--line);
+  font-size:14px;font-weight:500;line-height:1.4;
+  transition:opacity .45s ease;pointer-events:none}
+#hint.ok{border-color:rgba(74,222,128,.4);color:#BFF3D2}
 
-  .views{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px}
-  .vw{display:flex;flex-direction:column;gap:3px;align-items:center;padding:10px 4px;
-      background:transparent;border:1px solid var(--line);color:var(--paper);cursor:pointer;
-      font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase}
-  .vw em{font-style:normal;font-size:9px;color:var(--muted);letter-spacing:.06em}
-  .vw[data-filled=true] em{color:var(--brass-dim)}
-  .vw[data-active=true]{border-color:var(--brass);color:var(--brass)}
-  .vw:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+/* bas de cabine */
+#hudBottom{left:0;right:0;bottom:0;display:flex;flex-direction:column;gap:12px;
+  padding:16px 14px calc(var(--sab) + 10px);
+  background:linear-gradient(0deg,rgba(0,0,0,.82) 42%,rgba(0,0,0,0))}
+#shotRow{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.roundlbl{display:flex;flex-direction:column;align-items:center;gap:4px;width:62px;
+  color:var(--text);font-size:9.5px;font-weight:500}
+.roundlbl .c{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;
+  background:rgba(20,17,15,.68);border:1px solid var(--line);transition:transform .14s}
+.roundlbl:active .c{transform:scale(.92)}
+.roundlbl svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.7}
+#shutter{width:72px;height:72px;border-radius:50%;background:#fff;
+  border:4px solid rgba(255,255,255,.34);background-clip:padding-box;
+  box-shadow:0 0 0 2px rgba(0,0,0,.35);transition:transform .12s}
+#shutter:active{transform:scale(.9)}
+#shutter[disabled]{opacity:.4}
 
-  button.act{width:100%;padding:11px;background:transparent;color:var(--paper);
-             border:1px solid var(--line);cursor:pointer;font-family:'IBM Plex Mono',monospace;
-             font-size:11px;letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px}
-  button.act:hover{border-color:var(--brass);color:var(--brass)}
-  button.act:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
-  button.act.primary{background:var(--brass);color:#14110F;border-color:var(--brass);font-weight:500}
-  .toggle{display:flex;align-items:center;gap:9px;font-size:12px;margin-bottom:9px;cursor:pointer}
-  .toggle input{accent-color:var(--brass);width:15px;height:15px}
-  .note{font-size:11px;line-height:1.55;color:var(--muted);margin-top:16px}
-  .note b{color:var(--paper);font-weight:500}
-  input[type=file]{display:none}
+/* dock des vêtements */
+#dock{border-radius:var(--r-m);border:1px solid var(--line);background:rgba(18,16,14,.8);
+  padding:11px 12px 12px}
+#dock.hide{display:none}
+.dock-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px}
+.dock-h b{font-size:12.5px;font-weight:600}
+.dock-h button{font-size:11.5px;color:var(--gold);font-weight:500}
+#dockList{display:flex;gap:9px;overflow-x:auto;scrollbar-width:none;
+  scroll-snap-type:x proximity;padding-bottom:2px}
+#dockList::-webkit-scrollbar{display:none}
+.thumb{flex:none;width:60px;height:60px;border-radius:var(--r-s);overflow:hidden;
+  border:1px solid var(--line);background:#15120F;scroll-snap-align:start;
+  display:grid;place-items:center;position:relative;transition:transform .14s}
+.thumb:active{transform:scale(.94)}
+.thumb img{width:100%;height:100%;object-fit:contain}
+.thumb[aria-pressed=true]{border-color:var(--gold-2);box-shadow:0 0 0 1px var(--gold-2)}
+.thumb.add{border-style:dashed;color:var(--muted)}
+.thumb.add svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8}
+
+/* barre de détourage, conservée du moteur */
+#cutbar{display:none;position:absolute;left:10px;right:10px;bottom:calc(var(--sab) + 12px);
+  z-index:30;gap:7px;flex-wrap:wrap;align-items:center;justify-content:center;
+  background:rgba(16,13,11,.94);border:1px solid var(--line);border-radius:var(--r-m);padding:10px}
+#cutbar button{padding:9px 13px;border-radius:999px;border:1px solid var(--line);
+  font-size:11.5px;font-weight:500}
+#cutbar button.go{background:var(--grad);color:#1A1206;border-color:transparent;font-weight:600}
+#cutbar label{display:flex;align-items:center;gap:7px;font-size:10.5px;color:var(--muted)}
+#cutbar input[type=range]{width:96px}
+
+/* overlay d'ouverture / erreur caméra */
+#start{position:absolute;inset:0;z-index:40;display:none;flex-direction:column;
+  align-items:center;justify-content:center;gap:18px;text-align:center;padding:30px;
+  background:#0B0A09}
+#start.on{display:flex}
+#start p{font-size:13.5px;color:var(--muted);max-width:19em;line-height:1.55}
+#start b{color:var(--text);font-weight:600}
+
+/* ---------- feuilles ---------- */
+#scrim{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.62);
+  opacity:0;pointer-events:none;transition:opacity .26s}
+#scrim.on{opacity:1;pointer-events:auto}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:80;max-height:88vh;
+  display:flex;flex-direction:column;
+  background:var(--bg2);border-top:1px solid var(--line-2);
+  border-radius:var(--r-l) var(--r-l) 0 0;
+  transform:translateY(102%);transition:transform .3s cubic-bezier(.32,.72,0,1);
+  padding-bottom:var(--sab)}
+.sheet.on{transform:translateY(0)}
+.sheet-h{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:18px 20px 12px;flex:none}
+.sheet-h b{font-size:16.5px;font-weight:600}
+.sheet-b{overflow-y:auto;padding:0 20px 22px;overscroll-behavior:contain}
+.grab{width:38px;height:4px;border-radius:2px;background:var(--line-2);margin:9px auto 0;flex:none}
+
+.row{display:flex;align-items:center;gap:14px;width:100%;padding:15px 16px;
+  border:1px solid var(--line);border-radius:var(--r-m);background:var(--card);
+  margin-bottom:10px;text-align:left;font-size:14.5px;font-weight:500;
+  transition:transform .14s}
+.row:active{transform:scale(.985)}
+.row svg{width:20px;height:20px;stroke:var(--gold-2);fill:none;stroke-width:1.7}
+.row .sub{display:block;font-size:11.5px;color:var(--muted);font-weight:400;margin-top:2px}
+
+h3{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--muted);margin:22px 0 11px}
+h3:first-child{margin-top:4px}
+.group{border:1px solid var(--line);border-radius:var(--r-m);background:var(--card);
+  padding:4px 15px}
+.fld{padding:13px 0;border-bottom:1px solid var(--line)}
+.fld:last-child{border-bottom:none}
+.fld label{display:flex;justify-content:space-between;align-items:baseline;
+  font-size:14px;margin-bottom:9px}
+.fld label span{font-size:13px;color:var(--gold);font-weight:600}
+input[type=range]{width:100%;height:3px;border-radius:2px;appearance:none;outline:none;
+  background:linear-gradient(90deg,var(--gold-2) var(--p,50%),rgba(232,200,154,.16) var(--p,50%))}
+input[type=range]::-webkit-slider-thumb{appearance:none;width:22px;height:22px;border-radius:50%;
+  background:#F0DDBE;box-shadow:0 2px 8px rgba(0,0,0,.5);cursor:pointer}
+input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;border:none;
+  background:#F0DDBE;box-shadow:0 2px 8px rgba(0,0,0,.5);cursor:pointer}
+
+.tog{display:flex;align-items:center;justify-content:space-between;gap:14px;
+  padding:14px 0;border-bottom:1px solid var(--line);font-size:14px}
+.tog:last-child{border-bottom:none}
+.tog input{appearance:none;width:47px;height:28px;border-radius:999px;flex:none;
+  background:rgba(255,255,255,.13);position:relative;cursor:pointer;transition:background .2s}
+.tog input::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;
+  border-radius:50%;background:#fff;transition:transform .2s cubic-bezier(.32,.72,0,1)}
+.tog input:checked{background:var(--grad)}
+.tog input:checked::after{transform:translateX(19px)}
+.tog input:disabled{opacity:.4;cursor:default}
+.tog .t{flex:1}
+.tog .t span{display:block;font-size:11.5px;color:var(--muted);margin-top:2px;line-height:1.35}
+
+.duo{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+.duo button{display:flex;align-items:center;justify-content:center;gap:8px;padding:14px;
+  border:1px solid var(--line);border-radius:var(--r-m);background:var(--card);
+  font-size:13.5px;font-weight:500}
+.duo button svg{width:17px;height:17px;stroke:var(--gold-2);fill:none;stroke-width:1.7}
+.link{display:flex;align-items:center;justify-content:space-between;width:100%;
+  padding:14px 0;font-size:14px}
+.link span{color:var(--muted);font-size:13px;display:flex;align-items:center;gap:6px}
+
+.kv{display:flex;justify-content:space-between;align-items:baseline;padding:11px 0;
+  border-bottom:1px solid var(--line);font-size:13.5px}
+.kv:last-child{border-bottom:none}
+.kv .k{color:var(--muted)}
+.kv .v{color:var(--gold);font-weight:600}
+.note{font-size:12px;line-height:1.55;color:var(--muted);margin-top:12px}
+.note b{color:var(--text);font-weight:600}
+
+/* ---------- calibration ---------- */
+#calibBox{text-align:center;padding:8px 0 4px}
+#calibArt{width:150px;height:150px;margin:0 auto 22px;position:relative;
+  display:grid;place-items:center}
+#calibArt .brk{position:absolute;inset:0}
+#calibArt .brk path{stroke:var(--gold-2);fill:none;stroke-width:1.6;opacity:.55}
+#calibArt .body{width:64px;height:64px;stroke:var(--gold);fill:none;stroke-width:1.5}
+#calibBox h4{font-size:19px;font-weight:600;margin-bottom:10px}
+#calibBox li{list-style:none;font-size:13.5px;color:var(--muted);margin-bottom:5px}
+#ring{width:132px;height:132px;margin:22px auto 10px;position:relative}
+#ring svg{transform:rotate(-90deg)}
+#ring circle{fill:none;stroke-width:7;stroke-linecap:round}
+#ring .bg{stroke:rgba(232,200,154,.12)}
+#ring .fg{stroke:var(--gold-2);transition:stroke-dashoffset .25s linear}
+#ringN{position:absolute;inset:0;display:grid;place-items:center;
+  font-size:27px;font-weight:700;letter-spacing:-.02em}
+#calibState{font-size:12.5px;color:var(--muted)}
+
+/* ---------- grilles dressing / looks ---------- */
+.chips{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;margin-bottom:16px;
+  padding-bottom:2px}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;padding:9px 17px;border-radius:999px;border:1px solid var(--line);
+  font-size:12.5px;font-weight:500;color:var(--muted);transition:all .16s}
+.chip[aria-pressed=true]{background:var(--grad);color:#1A1206;border-color:transparent;font-weight:600}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+.cell{position:relative;border-radius:var(--r-m);overflow:hidden;border:1px solid var(--line);
+  background:var(--card);aspect-ratio:3/4;display:grid;place-items:center;
+  transition:transform .14s}
+.cell:active{transform:scale(.97)}
+.cell img{width:100%;height:100%;object-fit:cover}
+.cell.contain img{object-fit:contain;padding:6px}
+.cell .fav{position:absolute;top:8px;right:8px;width:29px;height:29px;border-radius:50%;
+  display:grid;place-items:center;background:rgba(11,10,9,.62);border:1px solid var(--line)}
+.cell .fav svg{width:15px;height:15px;stroke:#fff;fill:none;stroke-width:1.9}
+.cell .fav[aria-pressed=true] svg{stroke:var(--gold);fill:var(--gold)}
+.cell .cap{position:absolute;left:0;right:0;bottom:0;padding:18px 9px 7px;
+  background:linear-gradient(0deg,rgba(0,0,0,.85),transparent);
+  font-size:11px;font-weight:500;text-align:left;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.empty{text-align:center;padding:56px 22px;color:var(--muted)}
+.empty svg{width:44px;height:44px;stroke:var(--gold-dim);fill:none;stroke-width:1.3;margin:0 auto 16px}
+.empty b{display:block;color:var(--text);font-size:16px;font-weight:600;margin-bottom:7px}
+.empty p{font-size:13px;line-height:1.5;max-width:22em;margin:0 auto 20px}
+.screen-h{display:flex;align-items:center;gap:14px;margin-bottom:20px}
+.screen-h b{font-size:18px;font-weight:600}
+.stick{position:sticky;bottom:0;padding:14px 0 4px;
+  background:linear-gradient(0deg,var(--bg) 62%,transparent)}
+
+/* vues et pastilles : ces éléments sont fabriqués par le moteur */
+.vw{display:flex;flex-direction:column;align-items:center;gap:5px;padding:16px 6px;
+  border:1px solid var(--line);border-radius:var(--r-m);background:var(--card);
+  color:var(--text);font-size:12.5px;font-weight:600;transition:transform .14s}
+.vw:active{transform:scale(.96)}
+.vw em{font-style:normal;font-size:10px;font-weight:400;color:var(--muted)}
+.vw[data-filled=true]{border-color:var(--line-2)}
+.vw[data-filled=true] em{color:var(--gold-2)}
+.vw[data-active=true]{border-color:var(--gold-2)}
+.sw{width:38px;height:38px;border-radius:50%;border:1px solid var(--line);
+  padding:0;transition:transform .14s}
+.sw:active{transform:scale(.9)}
+.sw[aria-pressed=true]{box-shadow:0 0 0 2px var(--bg2),0 0 0 4px var(--gold-2)}
+
+/* aperçu du look capturé */
+#shotImg{width:100%;border-radius:var(--r-m);border:1px solid var(--line);display:block;
+  max-height:46vh;object-fit:contain;background:#000;margin-bottom:16px}
+.quad{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+/* profil */
+.avatar{width:74px;height:74px;border-radius:50%;display:grid;place-items:center;
+  background:var(--card-2);border:1px solid var(--line-2);margin:0 auto 14px}
+.avatar svg{width:34px;height:34px;stroke:var(--gold-2);fill:none;stroke-width:1.4}
+
+/* Le flou n'apparaît que hors du miroir : au-dessus d'un canvas qui se
+   recompose trente fois par seconde, il coûte 10 à 20 % des images. */
+.glass{backdrop-filter:blur(22px) saturate(1.5);-webkit-backdrop-filter:blur(22px) saturate(1.5);
+  background:rgba(18,17,16,.72)}
+/* Ces deux feuilles se règlent en regardant le miroir : elles ne doivent
+   jamais le recouvrir entièrement, sinon on ajuste à l'aveugle. */
+#shAdjust{max-height:68vh}
+#shCalib{max-height:60vh}
+input[type=file]{display:none}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
 
-<header>
-  <h1>Cabine</h1>
-  <div class="sub">essayage virtuel · v21</div>
-  <div class="status" id="status">En attente</div>
-</header>
+<div id="app">
 
-<main>
-  <div id="stage">
-    <canvas id="out"></canvas>
-    <video id="cam" playsinline muted autoplay></video>
-    <div id="start">
-      <button id="btnStart">Ouvrir la caméra</button>
-      <p>Safari demande l'autorisation au premier appui, puis le modèle se télécharge.</p>
+  <!-- ============ ACCUEIL ============ -->
+  <section class="screen" id="home" data-screen="home">
+    <div class="pad">
+      <div class="brand">
+        <svg width="46" height="40" viewBox="0 0 46 40" fill="none" stroke="#C9A063" stroke-width="1.5">
+          <path d="M23 6.5c-2.2 0-4 1.6-4 3.6 0 1.5 1 2.8 2.4 3.3L23 14l1.6-.6"/>
+          <path d="M23 14 6 25.5c-1.3.9-.7 3 .9 3h32.2c1.6 0 2.2-2.1.9-3L23 14Z"/>
+          <path d="M37 6.5l1 2.6 2.6 1-2.6 1-1 2.6-1-2.6-2.6-1 2.6-1 1-2.6Z"/>
+        </svg>
+        <h1>FitRoom AI</h1>
+      </div>
+      <h2 class="hero">Votre cabine<br>d'essayage<br><span class="g">intelligente ✦</span></h2>
+      <p class="lede">Essayez vos vêtements directement avec votre caméra.</p>
+      <div class="pill">✦ LIVE <i></i> IA <i></i> RÉALISTE</div>
+      <div class="stack">
+        <button class="btn btn-1" id="goCabine">
+          <svg viewBox="0 0 24 24"><path d="M3 8.5A2.5 2.5 0 0 1 5.5 6h1.7a1 1 0 0 0 .8-.4l1-1.3a1 1 0 0 1 .8-.4h4.4a1 1 0 0 1 .8.4l1 1.3a1 1 0 0 0 .8.4h1.7A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5v-8Z"/><circle cx="12" cy="12" r="3.4"/></svg>
+          Ouvrir ma cabine
+        </button>
+        <button class="btn btn-2" id="goDressing2">
+          <svg viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><circle cx="8.5" cy="10" r="1.8"/><path d="m4 17 4.6-4.2a1.6 1.6 0 0 1 2.2 0L15 17"/><path d="m13.5 14 2-1.8a1.6 1.6 0 0 1 2.2 0L20 14.4"/></svg>
+          Mes vêtements
+        </button>
+      </div>
+      <div class="feats">
+        <div class="feat">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="2.6"/><path d="M12 1.8v3.4M12 18.8v3.4M22.2 12h-3.4M5.2 12H1.8"/></svg>
+          <b>Essayage LIVE</b><span>en temps réel</span></div>
+        <div class="feat">
+          <svg viewBox="0 0 24 24"><path d="M12 3.2 20 7.6v8.8L12 20.8 4 16.4V7.6L12 3.2Z"/><path d="M9.4 10.6h.01M14.6 10.6h.01M9.6 15c1.6-1.3 3.2-1.3 4.8 0"/></svg>
+          <b>IA intelligente</b><span>ajuste pour vous</span></div>
+        <div class="feat">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.4v2.6M12 19v2.6M21.6 12H19M5 12H2.4M18.8 5.2 17 7M7 17l-1.8 1.8M18.8 18.8 17 17M7 7 5.2 5.2"/></svg>
+          <b>Rendu réaliste</b><span>lumière &amp; occlusion</span></div>
+        <div class="feat">
+          <svg viewBox="0 0 24 24"><rect x="3.4" y="3.4" width="7.2" height="7.2" rx="1.6"/><rect x="13.4" y="3.4" width="7.2" height="7.2" rx="1.6"/><rect x="3.4" y="13.4" width="7.2" height="7.2" rx="1.6"/><rect x="13.4" y="13.4" width="7.2" height="7.2" rx="1.6"/></svg>
+          <b>Multi-vues</b><span>face, profil, dos</span></div>
+        <div class="feat">
+          <svg viewBox="0 0 24 24"><path d="M12 16V3.6M12 3.6 8 7.6M12 3.6l4 4"/><path d="M4.5 14v4.4A2.1 2.1 0 0 0 6.6 20.5h10.8a2.1 2.1 0 0 0 2.1-2.1V14"/></svg>
+          <b>Partage facile</b><span>en un clic</span></div>
+      </div>
     </div>
-    <div id="cutbar">
-      <button data-cut="auto">Fond auto</button>
-      <button data-cut="reset">Tout garder</button>
-      <label>Tolérance<input type="range" id="tol" min="12" max="110" step="1" value="46"></label>
-      <button data-cut="ok" class="go">Valider</button>
+  </section>
+
+  <!-- ============ CABINE ============ -->
+  <section class="screen full" id="cabine" data-screen="cabine">
+    <div id="stage">
+      <canvas id="out"></canvas>
+      <video id="cam" playsinline muted autoplay></video>
+
+      <div id="hint">Positionnez-vous face à la caméra</div>
+
+      <div class="hud" id="hudTop">
+        <button class="icobtn" id="cabBack" aria-label="Retour">
+          <svg viewBox="0 0 24 24"><path d="M15 5.5 8 12l7 6.5"/></svg></button>
+        <div id="hudTitle">
+          <b>Cabine LIVE ✦</b>
+          <span id="liveDot"><i></i>LIVE</span>
+        </div>
+        <button class="icobtn" id="cabFav" aria-pressed="false" aria-label="Favori">
+          <svg viewBox="0 0 24 24"><path d="M12 20s-7.2-4.5-7.2-9.4A4.1 4.1 0 0 1 12 8.1a4.1 4.1 0 0 1 7.2 2.5C19.2 15.5 12 20 12 20Z"/></svg></button>
+      </div>
+
+      <div class="hud" id="rail">
+        <button class="rail-b" id="railAdd">
+          <svg viewBox="0 0 24 24"><path d="M12 5.5v13M5.5 12h13"/></svg>Ajouter</button>
+        <button class="rail-b" id="railAdjust">
+          <svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h3M11 17h9"/><circle cx="16" cy="7" r="2.2"/><circle cx="9" cy="17" r="2.2"/></svg>Ajuster</button>
+        <button class="rail-b" id="railCalib">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="5.2" r="2.4"/><path d="M12 7.6v7M12 14.6 8.6 20M12 14.6 15.4 20M7.4 10.4h9.2"/></svg>Calibrer</button>
+      </div>
+
+      <div class="hud" id="hudBottom">
+        <div id="shotRow">
+          <button class="roundlbl" id="btnViews">
+            <span class="c"><svg viewBox="0 0 24 24"><path d="M12 3.2 20 7.6v8.8L12 20.8 4 16.4V7.6L12 3.2Z"/><path d="M4 7.6 12 12l8-4.4M12 12v8.8"/></svg></span>Vues</button>
+          <button id="shutter" aria-label="Capturer"></button>
+          <button class="roundlbl" id="btnLooks">
+            <span class="c"><svg viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><circle cx="8.5" cy="10" r="1.8"/><path d="m4 17 4.6-4.2a1.6 1.6 0 0 1 2.2 0L15 17"/></svg></span>Mes looks</button>
+        </div>
+        <div id="dock">
+          <div class="dock-h"><b>Mes vêtements</b><button id="dockAll">Tout</button></div>
+          <div id="dockList"></div>
+        </div>
+      </div>
+
+      <div id="cutbar">
+        <button data-cut="auto">Fond auto</button>
+        <button data-cut="reset">Tout garder</button>
+        <label>Tolérance<input type="range" id="tol" min="12" max="110" step="1" value="46"></label>
+        <button data-cut="ok" class="go">Valider</button>
+      </div>
+
+      <div id="start">
+        <button class="btn btn-1" id="btnStart" style="max-width:280px">
+          <svg viewBox="0 0 24 24"><path d="M3 8.5A2.5 2.5 0 0 1 5.5 6h1.7a1 1 0 0 0 .8-.4l1-1.3a1 1 0 0 1 .8-.4h4.4a1 1 0 0 1 .8.4l1 1.3a1 1 0 0 0 .8.4h1.7A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5v-8Z"/><circle cx="12" cy="12" r="3.4"/></svg>
+          Ouvrir ma cabine</button>
+        <p>Votre navigateur demande l'autorisation au premier appui, puis le modèle se télécharge une seule fois.</p>
+      </div>
     </div>
-    <div id="hint">Reculez pour cadrer épaules et hanches</div>
+  </section>
+
+  <!-- ============ VÊTEMENTS ============ -->
+  <section class="screen" id="dressing" data-screen="dressing">
+    <div class="pad">
+      <div class="screen-h"><b>Mes vêtements</b></div>
+      <div class="chips" id="chips">
+        <button class="chip" data-cat="tout" aria-pressed="true">Tout</button>
+        <button class="chip" data-cat="haut" aria-pressed="false">Hauts</button>
+        <button class="chip" data-cat="veste" aria-pressed="false">Vestes</button>
+      </div>
+      <div class="grid3" id="wardGrid"></div>
+      <div class="empty" id="wardEmpty">
+        <svg viewBox="0 0 24 24"><path d="M12 4.2c-1.7 0-3 1.2-3 2.7 0 1.1.7 2 1.8 2.5L12 10l1.2-.6"/><path d="M12 10 3.5 16.4c-1 .7-.5 2.2.7 2.2h15.6c1.2 0 1.7-1.5.7-2.2L12 10Z"/></svg>
+        <b>Votre dressing est vide</b>
+        <p>Photographiez un vêtement posé à plat ou importez-le depuis votre galerie. Il sera détouré puis calibré une seule fois.</p>
+        <button class="btn btn-1" id="wardAdd1" style="max-width:260px;margin:0 auto">Ajouter un vêtement</button>
+      </div>
+      <div class="stick" id="wardStick" hidden>
+        <button class="btn btn-1" id="wardAdd2">
+          <svg viewBox="0 0 24 24"><path d="M12 5.5v13M5.5 12h13"/></svg>Ajouter un vêtement</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ FAVORIS / LOOKS ============ -->
+  <section class="screen" id="looks" data-screen="looks">
+    <div class="pad">
+      <div class="screen-h"><b id="looksTitle">Mes looks</b></div>
+      <div class="grid2" id="looksGrid"></div>
+      <div class="empty" id="looksEmpty">
+        <svg viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><circle cx="8.5" cy="10" r="1.8"/><path d="m4 17 4.6-4.2a1.6 1.6 0 0 1 2.2 0L15 17"/></svg>
+        <b>Aucun look enregistré</b>
+        <p>Appuyez sur le déclencheur pendant un essayage pour garder une capture de votre tenue.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PROFIL ============ -->
+  <section class="screen" id="profil" data-screen="profil">
+    <div class="pad">
+      <div class="screen-h"><b>Profil</b></div>
+      <div class="avatar"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.8"/><path d="M4.6 20.2a7.6 7.6 0 0 1 14.8 0"/></svg></div>
+
+      <h3>Ma morphologie</h3>
+      <div class="group">
+        <div class="fld">
+          <label for="hCm">Votre taille <span id="vHCm">175 cm</span></label>
+          <input type="range" id="hCm" min="140" max="210" step="1" value="175">
+        </div>
+        <div class="fld">
+          <label style="margin-bottom:11px">Silhouette de référence</label>
+          <div class="duo" id="morpho" style="margin:0">
+            <button data-m="h" aria-pressed="true">Homme</button>
+            <button data-m="f" aria-pressed="false">Femme</button>
+          </div>
+        </div>
+      </div>
+
+      <h3>Ma taille conseillée</h3>
+      <div class="group">
+        <div class="kv"><span class="k">Échelle</span><span class="v" id="mScale">—</span></div>
+        <div class="kv"><span class="k">Carrure</span><span class="v" id="mShCm">—</span></div>
+        <div class="kv"><span class="k">Tour de poitrine</span><span class="v" id="mChest">—</span></div>
+        <div class="kv"><span class="k">Taille conseillée</span><span class="v" id="mSize">—</span></div>
+      </div>
+      <p class="note" id="sizeNote">Placez-vous de face, en pied, chevilles visibles. Sans les chevilles,
+        l'échelle est déduite de proportions moyennes et le résultat perd en fiabilité.</p>
+      <button class="btn btn-3" id="profMeasure" style="margin-top:14px">✦ Trouver ma taille</button>
+
+      <h3>Ma cabine</h3>
+      <button class="row" id="pShare"><svg viewBox="0 0 24 24"><path d="M12 16V3.6M12 3.6 8 7.6M12 3.6l4 4"/><path d="M4.5 14v4.4A2.1 2.1 0 0 0 6.6 20.5h10.8a2.1 2.1 0 0 0 2.1-2.1V14"/></svg>
+        <span>Partager la cabine<span class="sub">Envoyer le lien de FitRoom AI</span></span></button>
+      <button class="row" id="pExport"><svg viewBox="0 0 24 24"><path d="M12 3.6v12.8M12 16.4l-4-4M12 16.4l4-4"/><path d="M4.5 17.4v1.2a1.9 1.9 0 0 0 1.9 1.9h11.2a1.9 1.9 0 0 0 1.9-1.9v-1.2"/></svg>
+        <span>Exporter le vêtement<span class="sub">Photos détourées et points de calibration</span></span></button>
+      <button class="row" id="pImport"><svg viewBox="0 0 24 24"><path d="M12 16.4V3.6M12 3.6 8 7.6M12 3.6l4 4"/><path d="M4.5 17.4v1.2a1.9 1.9 0 0 0 1.9 1.9h11.2a1.9 1.9 0 0 0 1.9-1.9v-1.2"/></svg>
+        <span>Importer un vêtement<span class="sub">Depuis un fichier reçu</span></span></button>
+      <button class="row" id="p3d"><svg viewBox="0 0 24 24"><path d="M12 3.2 20 7.6v8.8L12 20.8 4 16.4V7.6L12 3.2Z"/><path d="M4 7.6 12 12l8-4.4M12 12v8.8"/></svg>
+        <span>Créer l'avatar 3D<span class="sub">Volume approché depuis vos proportions</span></span></button>
+
+      <h3>Diagnostic</h3>
+      <div class="group">
+        <div class="kv"><span class="k">Images / seconde</span><span class="v tnum" id="mFps">—</span></div>
+        <div class="kv"><span class="k">Largeur d'épaules</span><span class="v tnum" id="mShoulder">—</span></div>
+        <div class="kv"><span class="k">Longueur du buste</span><span class="v tnum" id="mTorso">—</span></div>
+        <div class="kv"><span class="k">Inclinaison</span><span class="v tnum" id="mAngle">—</span></div>
+        <div class="kv"><span class="k">Vue · rotation</span><span class="v tnum" id="mView">—</span></div>
+        <div class="kv"><span class="k">Manches</span><span class="v tnum" id="mSleeve">—</span></div>
+      </div>
+      <p class="note" id="installNote">Pour l'installer en app : bouton Partager du navigateur,
+        puis <b>Sur l'écran d'accueil</b>.</p>
+      <p class="note">Le vêtement est ancré sur ses propres coutures d'épaules, étiré sur votre buste,
+        déformé sur trois points, éclairé par la lumière de la pièce, et masqué là où votre peau passe
+        devant. <b>Sa limite</b> : votre vrai vêtement reste dessous.</p>
+    </div>
+  </section>
+
+  <nav id="tabbar">
+    <button class="tab" data-go="home" aria-selected="true">
+      <svg viewBox="0 0 24 24"><path d="M3.6 10.4 12 3.8l8.4 6.6V19a1.6 1.6 0 0 1-1.6 1.6H5.2A1.6 1.6 0 0 1 3.6 19v-8.6Z"/></svg>Accueil</button>
+    <button class="tab" data-go="cabine" aria-selected="false">
+      <svg viewBox="0 0 24 24"><path d="M3 8.5A2.5 2.5 0 0 1 5.5 6h1.7a1 1 0 0 0 .8-.4l1-1.3a1 1 0 0 1 .8-.4h4.4a1 1 0 0 1 .8.4l1 1.3a1 1 0 0 0 .8.4h1.7A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5v-8Z"/><circle cx="12" cy="12" r="3.4"/></svg>Cabine</button>
+    <button class="tab" data-go="dressing" aria-selected="false">
+      <svg viewBox="0 0 24 24"><path d="M12 4.2c-1.7 0-3 1.2-3 2.7 0 1.1.7 2 1.8 2.5L12 10l1.2-.6"/><path d="M12 10 3.5 16.4c-1 .7-.5 2.2.7 2.2h15.6c1.2 0 1.7-1.5.7-2.2L12 10Z"/></svg>Vêtements</button>
+    <button class="tab" data-go="looks" aria-selected="false">
+      <svg viewBox="0 0 24 24"><path d="m12 4.4 2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4-3.9-3.8 5.4-.8L12 4.4Z"/></svg>Favoris</button>
+    <button class="tab" data-go="profil" aria-selected="false">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.8"/><path d="M4.6 20.2a7.6 7.6 0 0 1 14.8 0"/></svg>Profil</button>
+  </nav>
+</div>
+
+<div id="scrim"></div>
+
+<!-- ============ FEUILLE : AJOUTER ============ -->
+<div class="sheet" id="shAdd">
+  <div class="grab"></div>
+  <div class="sheet-h"><b>Ajouter un vêtement</b>
+    <button class="icobtn" data-close><svg viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>
+  <div class="sheet-b">
+    <button class="row" id="addShoot"><svg viewBox="0 0 24 24"><path d="M3 8.5A2.5 2.5 0 0 1 5.5 6h1.7a1 1 0 0 0 .8-.4l1-1.3a1 1 0 0 1 .8-.4h4.4a1 1 0 0 1 .8.4l1 1.3a1 1 0 0 0 .8.4h1.7A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5v-8Z"/><circle cx="12" cy="12" r="3.4"/></svg>
+      <span>Photographier<span class="sub">Posez le vêtement à plat, bien éclairé</span></span></button>
+    <button class="row" id="addGallery"><svg viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><circle cx="8.5" cy="10" r="1.8"/><path d="m4 17 4.6-4.2a1.6 1.6 0 0 1 2.2 0L15 17"/></svg>
+      <span>Importer depuis la galerie<span class="sub">Une photo déjà prise</span></span></button>
+    <button class="row" id="addWard"><svg viewBox="0 0 24 24"><path d="M12 4.2c-1.7 0-3 1.2-3 2.7 0 1.1.7 2 1.8 2.5L12 10l1.2-.6"/><path d="M12 10 3.5 16.4c-1 .7-.5 2.2.7 2.2h15.6c1.2 0 1.7-1.5.7-2.2L12 10Z"/></svg>
+      <span>Mes vêtements<span class="sub">Reprendre un vêtement déjà détouré</span></span></button>
+    <button class="row" id="addShared"><svg viewBox="0 0 24 24"><path d="M12 16.4V3.6M12 3.6 8 7.6M12 3.6l4 4"/><path d="M4.5 17.4v1.2a1.9 1.9 0 0 0 1.9 1.9h11.2a1.9 1.9 0 0 0 1.9-1.9v-1.2"/></svg>
+      <span>Importer un vêtement partagé<span class="sub">Fichier reçu de quelqu'un d'autre</span></span></button>
+    <p class="note">✦ <b>Analyse du vêtement</b> — le fond est retiré par un modèle de segmentation
+      qui tourne sur votre appareil. Aucune photo ne quitte le téléphone.</p>
   </div>
+</div>
 
-  <aside>
-    <div class="measures">
-      <div class="row"><span class="k">Largeur d'épaules</span><span class="v" id="mShoulder">—</span></div>
-      <div class="row"><span class="k">Longueur du buste</span><span class="v" id="mTorso">—</span></div>
-      <div class="row"><span class="k">Inclinaison</span><span class="v" id="mAngle">—</span></div>
-      <div class="row"><span class="k">Vue · rotation</span><span class="v" id="mView">—</span></div>
-      <div class="row"><span class="k">Manches</span><span class="v" id="mSleeve">—</span></div>
-      <div class="row"><span class="k">Images / seconde</span><span class="v" id="mFps">—</span></div>
-    </div>
-
-    <h2>Le vêtement</h2>
-    <div class="swatches" id="swatches"></div>
-    <div class="views" id="views">
-      <button class="vw" data-slot="face">Face<em>vide</em></button>
-      <button class="vw" data-slot="profil">Profil<em>vide</em></button>
-      <button class="vw" data-slot="dos">Dos<em>vide</em></button>
-    </div>
-    <button class="act" id="btnRecal" style="display:none">Recalibrer cette vue</button>
-    <input type="file" id="file" accept="image/*" />
-
-    <h2>Coupe</h2>
-    <div class="field">
-      <label for="sWidth">Carrure <span id="vWidth">1.05×</span></label>
-      <input type="range" id="sWidth" min="0.8" max="1.6" step="0.01" value="1.05">
-    </div>
-    <div class="field">
-      <label for="sLength">Longueur <span id="vLength">1.25×</span></label>
-      <input type="range" id="sLength" min="0.8" max="2" step="0.01" value="1.25">
-    </div>
-    <div class="field">
-      <label for="sOffset">Hauteur au col <span id="vOffset">0.02</span></label>
-      <input type="range" id="sOffset" min="-0.3" max="0.3" step="0.01" value="0.02">
+<!-- ============ FEUILLE : AJUSTER ============ -->
+<div class="sheet" id="shAdjust">
+  <div class="grab"></div>
+  <div class="sheet-h"><b>Ajuster le vêtement</b>
+    <button class="icobtn" data-close><svg viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>
+  <div class="sheet-b">
+    <h3>Coupe</h3>
+    <div class="group">
+      <div class="fld"><label for="sWidth">Carrure <span id="vWidth">50 %</span></label>
+        <input type="range" id="sWidth" min="0.8" max="1.6" step="0.01" value="1.05"></div>
+      <div class="fld"><label for="sLength">Longueur <span id="vLength">50 %</span></label>
+        <input type="range" id="sLength" min="0.8" max="2" step="0.01" value="1.25"></div>
+      <div class="fld"><label for="sOffset">Hauteur du col <span id="vOffset">50 %</span></label>
+        <input type="range" id="sOffset" min="-0.3" max="0.3" step="0.01" value="0.02"></div>
     </div>
 
-    <h2>Rendu</h2>
-    <div class="field">
-      <label for="sShade">Lumière du corps <span id="vShade">70 %</span></label>
-      <input type="range" id="sShade" min="0" max="1" step="0.01" value="0.7">
-    </div>
-    <div class="field">
-      <label for="sSmooth">Lissage <span id="vSmooth">0.45</span></label>
-      <input type="range" id="sSmooth" min="0.05" max="0.9" step="0.01" value="0.45">
-    </div>
-    <div class="field">
-      <label for="sOpacity">Opacité <span id="vOpacity">100 %</span></label>
-      <input type="range" id="sOpacity" min="0.2" max="1" step="0.01" value="1">
+    <h3>Rendu</h3>
+    <div class="group">
+      <div class="fld"><label for="sShade">Lumière <span id="vShade">70 %</span></label>
+        <input type="range" id="sShade" min="0" max="1" step="0.01" value="0.7"></div>
+      <div class="fld"><label for="sSmooth">Lissage <span id="vSmooth">50 %</span></label>
+        <input type="range" id="sSmooth" min="0.05" max="0.9" step="0.01" value="0.45"></div>
+      <div class="fld"><label for="sOpacity">Opacité <span id="vOpacity">100 %</span></label>
+        <input type="range" id="sOpacity" min="0.2" max="1" step="0.01" value="1"></div>
     </div>
 
-    <h2>Repères</h2>
-    <label class="toggle"><input type="checkbox" id="cSleeves" checked> Manches articulées</label>
-    <p class="note" style="margin:0 0 12px">Chaque manche suit son propre segment épaule → coude. Sur la vue de face uniquement.</p>
-    <label class="toggle"><input type="checkbox" id="cOcclusion" checked> Occlusion par la peau</label>
-    <p class="note" id="occNote" style="margin:0 0 12px">Le tissu passe derrière les bras et le cou. Coûte quelques images par seconde.</p>
-    <label class="toggle"><input type="checkbox" id="cSkeleton"> Afficher le squelette</label>
-    <label class="toggle"><input type="checkbox" id="cGarment" checked> Afficher le vêtement</label>
-
-    <button class="act primary" id="btnShot">Enregistrer l'image</button>
-    <button class="act" id="btn3d">Créer l'avatar 3D</button>
-
-    <h2>Taille conseillée</h2>
-    <div class="field">
-      <label for="hCm">Votre taille <span id="vHCm">175 cm</span></label>
-      <input type="range" id="hCm" min="140" max="210" step="1" value="175">
+    <h3>Corps</h3>
+    <div class="duo">
+      <button id="adjCalib"><svg viewBox="0 0 24 24"><circle cx="12" cy="5.2" r="2.4"/><path d="M12 7.6v7M12 14.6 8.6 20M12 14.6 15.4 20M7.4 10.4h9.2"/></svg>Calibration</button>
+      <button id="btnRecal"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 4v4.6h-4.6"/></svg>Recalibrer</button>
     </div>
-    <div class="seg" id="morpho">
-      <button data-m="h" aria-pressed="true">Homme</button>
-      <button data-m="f" aria-pressed="false">Femme</button>
-    </div>
-    <button class="act" id="btnMeasure">Mesurer pendant 3 s</button>
-    <div class="measures" style="margin-top:4px">
-      <div class="row"><span class="k">Échelle</span><span class="v" id="mScale">—</span></div>
-      <div class="row"><span class="k">Carrure</span><span class="v" id="mShCm">—</span></div>
-      <div class="row"><span class="k">Tour de poitrine</span><span class="v" id="mChest">—</span></div>
-      <div class="row"><span class="k">Taille conseillée</span><span class="v" id="mSize">—</span></div>
-    </div>
-    <p class="note" style="margin-top:10px" id="sizeNote">Placez-vous de face, en pied,
-    chevilles visibles. Sans les chevilles, l'échelle est déduite de proportions moyennes
-    et le résultat perd en fiabilité.</p>
+    <button class="link" id="adjMeasures">Mesures <span>Voir mes mesures
+      <svg viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" fill="none" stroke-width="1.9"><path d="m9.5 6 6 6-6 6"/></svg></span></button>
 
-    <h2>Partage</h2>
-    <button class="act" id="btnShare">Partager la cabine</button>
-    <button class="act" id="btnExport">Exporter le vêtement</button>
-    <button class="act" id="btnImport">Importer un vêtement</button>
-    <p class="note" style="margin-top:10px" id="installNote">Pour l'installer en app :
-    bouton Partager de Safari, puis <b>Sur l'écran d'accueil</b>.</p>
-    <input type="file" id="fileJson" accept="application/json,.json" />
-    <p class="note" style="margin-top:10px">Le fichier exporté contient les photos détourées
-    et leurs points de calibration. Qui le reçoit l'importe et essaie le vêtement sans rien refaire.</p>
+    <h3>Tracking</h3>
+    <div class="group">
+      <label class="tog"><span class="t">Manches articulées
+        <span>Chaque manche suit son segment épaule → coude, sur la vue de face.</span></span>
+        <input type="checkbox" id="cSleeves" checked></label>
+      <label class="tog"><span class="t">Occlusion par la peau
+        <span id="occNote">Le tissu passe derrière les bras et le cou. Coûte quelques images par seconde.</span></span>
+        <input type="checkbox" id="cOcclusion" checked></label>
+      <label class="tog"><span class="t">Afficher le squelette</span>
+        <input type="checkbox" id="cSkeleton"></label>
+      <label class="tog"><span class="t">Afficher le vêtement</span>
+        <input type="checkbox" id="cGarment" checked></label>
+    </div>
 
-    <p class="note">
-      Le vêtement est ancré sur ses propres coutures d'épaules, étiré sur votre buste,
-      déformé sur trois points, éclairé par la lumière de la pièce, et masqué là où
-      votre peau passe devant. <b>Sa limite</b> : votre vrai vêtement reste dessous.
-      L'effacer demande un modèle de diffusion qui repeint le torse.
-    </p>
-  </aside>
-</main>
+    <button class="btn btn-3" id="adjReset" style="margin-top:18px">Réinitialiser les réglages</button>
+  </div>
+</div>
+
+<!-- ============ FEUILLE : CALIBRER ============ -->
+<div class="sheet" id="shCalib">
+  <div class="grab"></div>
+  <div class="sheet-h"><b>Calibrer mon corps</b>
+    <button class="icobtn" data-close><svg viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>
+  <div class="sheet-b">
+    <div id="calibBox">
+      <div id="calibArt">
+        <svg class="brk" viewBox="0 0 150 150"><path d="M4 34V10a6 6 0 0 1 6-6h24M146 34V10a6 6 0 0 0-6-6h-24M4 116v24a6 6 0 0 0 6 6h24M146 116v24a6 6 0 0 1-6 6h-24"/></svg>
+        <svg class="body" viewBox="0 0 24 24"><circle cx="12" cy="4.6" r="2.6"/><path d="M12 7.2v8.4M12 15.6 8.4 22M12 15.6 15.6 22M6.6 10h10.8"/></svg>
+      </div>
+      <h4 id="calibH">Tenez-vous face à la caméra</h4>
+      <ul><li>Gardez vos chevilles visibles</li><li>Restez immobile 3 secondes</li></ul>
+      <div id="ring" hidden>
+        <svg viewBox="0 0 132 132" width="132" height="132">
+          <circle class="bg" cx="66" cy="66" r="60"></circle>
+          <circle class="fg" cx="66" cy="66" r="60" stroke-dasharray="377" stroke-dashoffset="377"></circle>
+        </svg>
+        <div id="ringN">0 %</div>
+      </div>
+      <p id="calibState" hidden>Calibration en cours…</p>
+    </div>
+    <button class="btn btn-1" id="btnMeasure" style="margin-top:20px">Calibrer mon corps</button>
+    <div class="group" style="margin-top:18px">
+      <div class="kv"><span class="k">Échelle</span><span class="v" id="mScale2">—</span></div>
+      <div class="kv"><span class="k">Carrure</span><span class="v" id="mShCm2">—</span></div>
+      <div class="kv"><span class="k">Tour de poitrine</span><span class="v" id="mChest2">—</span></div>
+      <div class="kv"><span class="k">Taille conseillée</span><span class="v" id="mSize2">—</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ FEUILLE : VUES ============ -->
+<div class="sheet" id="shViews">
+  <div class="grab"></div>
+  <div class="sheet-h"><b>Vues du vêtement</b>
+    <button class="icobtn" data-close><svg viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>
+  <div class="sheet-b">
+    <p class="note" style="margin:0 0 14px">La bascule est automatique : elle suit votre rotation réelle
+      devant la caméra. Ajoutez une photo par orientation pour que le vêtement reste juste quand vous tournez.</p>
+    <div id="views" class="grid3"></div>
+    <h3>Couleur du t-shirt de démonstration</h3>
+    <div id="swatches" style="display:flex;gap:10px;flex-wrap:wrap"></div>
+  </div>
+</div>
+
+<!-- ============ FEUILLE : LOOK CAPTURÉ ============ -->
+<div class="sheet" id="shShot">
+  <div class="grab"></div>
+  <div class="sheet-h"><b>Votre look ✦</b>
+    <button class="icobtn" data-close><svg viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>
+  <div class="sheet-b">
+    <img id="shotImg" alt="Capture de votre essayage">
+    <div class="quad">
+      <button class="row" id="shotFav" style="margin:0"><svg viewBox="0 0 24 24"><path d="M12 20s-7.2-4.5-7.2-9.4A4.1 4.1 0 0 1 12 8.1a4.1 4.1 0 0 1 7.2 2.5C19.2 15.5 12 20 12 20Z"/></svg>Favori</button>
+      <button class="row" id="shotShare" style="margin:0"><svg viewBox="0 0 24 24"><path d="M12 16V3.6M12 3.6 8 7.6M12 3.6l4 4"/><path d="M4.5 14v4.4A2.1 2.1 0 0 0 6.6 20.5h10.8a2.1 2.1 0 0 0 2.1-2.1V14"/></svg>Partager</button>
+      <button class="row" id="shotSave" style="margin:0"><svg viewBox="0 0 24 24"><path d="M12 3.6v12.8M12 16.4l-4-4M12 16.4l4-4"/><path d="M4.5 17.4v1.2a1.9 1.9 0 0 0 1.9 1.9h11.2a1.9 1.9 0 0 0 1.9-1.9v-1.2"/></svg>Enregistrer</button>
+      <button class="row" id="shotBack" style="margin:0"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 4v4.6h-4.6"/></svg>Continuer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ FEUILLE : LOOK OUVERT ============ -->
+<div class="sheet glass" id="shLook">
+  <div class="grab"></div>
+  <div class="sheet-h"><b>Look</b>
+    <button class="icobtn" data-close><svg viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>
+  <div class="sheet-b">
+    <img id="lookImg" alt="Look enregistré">
+    <div class="quad">
+      <button class="row" id="lookFav" style="margin:0"><svg viewBox="0 0 24 24"><path d="M12 20s-7.2-4.5-7.2-9.4A4.1 4.1 0 0 1 12 8.1a4.1 4.1 0 0 1 7.2 2.5C19.2 15.5 12 20 12 20Z"/></svg>Favori</button>
+      <button class="row" id="lookShare" style="margin:0"><svg viewBox="0 0 24 24"><path d="M12 16V3.6M12 3.6 8 7.6M12 3.6l4 4"/><path d="M4.5 14v4.4A2.1 2.1 0 0 0 6.6 20.5h10.8a2.1 2.1 0 0 0 2.1-2.1V14"/></svg>Partager</button>
+      <button class="row" id="lookRetry" style="margin:0"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 4v4.6h-4.6"/></svg>Réessayer</button>
+      <button class="row" id="lookDel" style="margin:0"><svg viewBox="0 0 24 24"><path d="M5.5 7h13M9.5 7V5.2A1.2 1.2 0 0 1 10.7 4h2.6a1.2 1.2 0 0 1 1.2 1.2V7M7.2 7l.8 12a1.4 1.4 0 0 0 1.4 1.3h5.2a1.4 1.4 0 0 0 1.4-1.3l.8-12"/></svg>Supprimer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ FEUILLE : ARTICLE DU DRESSING ============ -->
+<div class="sheet glass" id="shItem">
+  <div class="grab"></div>
+  <div class="sheet-h"><b id="itemName">Vêtement</b>
+    <button class="icobtn" data-close><svg viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>
+  <div class="sheet-b">
+    <img id="itemImg" alt="" style="width:100%;max-height:34vh;object-fit:contain;background:#15120F;border-radius:18px;border:1px solid var(--line);margin-bottom:16px">
+    <div class="group">
+      <div class="kv"><span class="k">Catégorie</span><span class="v" id="itemCat">—</span></div>
+      <div class="kv"><span class="k">Ajouté le</span><span class="v" id="itemDate">—</span></div>
+      <div class="kv"><span class="k">Vues calibrées</span><span class="v" id="itemViews">—</span></div>
+    </div>
+    <p class="note" id="itemWarn" hidden></p>
+    <button class="btn btn-1" id="itemWear" style="margin-top:16px">Essayer maintenant</button>
+    <div class="duo" style="margin-top:10px">
+      <button id="itemFav">Favori</button>
+      <button id="itemDel">Supprimer</button>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="file" accept="image/*" />
+<input type="file" id="fileShoot" accept="image/*" capture="environment" />
+<input type="file" id="fileJson" accept="application/json,.json" />
+<div id="status" hidden></div>
+<div id="btnShot" hidden></div>
+<div id="btnShare" hidden></div>
+<div id="btnExport" hidden></div>
+<div id="btnImport" hidden></div>
+<div id="btn3d" hidden></div>
 
 <script type="module">
+/* Pont moteur <-> interface. Declare en var : le moteur touche a
+   certaines de ces cases pendant l'evaluation du module, donc avant que
+   la couche interface plus bas ne soit arrivee a sa ligne. */
+var liveOn = false, booting = false;
+var uiToast, uiGuide, uiCalibrated, uiSyncDock, uiCalibTick, uiMeasured,
+    uiMode, uiReady;
+
+/* Les trois boutons de vue sont fabriques ici : le moteur les cherche
+   des son evaluation, ils doivent donc exister avant lui. */
+(function(){
+  const host = document.getElementById('views');
+  for(const [s,l] of [['face','Face'],['profil','Profil'],['dos','Dos']]){
+    const b = document.createElement('button');
+    b.className = 'vw'; b.dataset.slot = s;
+    b.innerHTML = l + '<em>vide</em>';
+    host.appendChild(b);
+  }
+})();
+
+
 import { PoseLandmarker, ImageSegmenter, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
 
 const $ = id => document.getElementById(id);
-const canvas = $('out'), ctx = canvas.getContext('2d');
+const canvas = $('out'), ctx = canvas.getContext('2d', { alpha:false });
 const layer = document.createElement('canvas'), lctx = layer.getContext('2d');
+
+// Math.hypot gère les débordements d'exposant, ce qui le rend environ dix fois
+// plus lent qu'une racine. Sur les milliers d'appels par image de la grille de
+// déformation, la différence est mesurable.
+const hyp = (x,y)=>Math.sqrt(x*x + y*y);
+
+// Déclarés ici, et pas dans la section graphique plus bas : dropView() peut
+// être appelé par l'import d'un fichier de vêtement avant que cette section
+// ne soit évaluée, et une variable let n'existe pas avant sa ligne.
+let gl = null;
+const texCache = new WeakMap();
+
+// Éléments lus à chaque image : on résout les identifiants une bonne fois.
+// getElementById dans la boucle, c'était une quinzaine de recherches par image.
+const elGarment = $('cGarment'), elSleeves = $('cSleeves'),
+      elOcclusion = $('cOcclusion'), elSkeleton = $('cSkeleton');
+const elShoulder = $('mShoulder'), elTorso = $('mTorso'), elAngle = $('mAngle'),
+      elView = $('mView'), elSleeve = $('mSleeve'), elFps = $('mFps');
+
 // Safari annonce ctx.filter mais ne l'applique pas toujours au rendu.
 // On fabrique donc l'éclairage à la main : la vidéo réduite à 48×27 puis
 // réétirée donne un flou gratuit, et la désaturation efface les motifs.
@@ -261,14 +811,30 @@ const tiny = document.createElement('canvas');
 tiny.width = 48; tiny.height = 27;
 const tctx = tiny.getContext('2d', { willReadFrequently:true });
 
-function buildShading(){
+// La luminance moyenne de la pièce ne change pas à 60 Hz. On la relit
+// rarement, et le décalage autour d'elle se fait dans le nuanceur : la
+// version d'origine faisait un getImageData par image, ce qui force le
+// processeur à attendre la carte graphique à chaque tour de boucle.
+let shadeMean = 0.5, meanTick = 0;
+const MEAN_EVERY = 12;
+
+function drawTiny(){
   tctx.save(); tctx.translate(tiny.width,0); tctx.scale(-1,1);
   tctx.drawImage(video,0,0,tiny.width,tiny.height); tctx.restore();
-  const d = tctx.getImageData(0,0,tiny.width,tiny.height), p = d.data;
-  const n = p.length/4;
+}
+
+function updateMean(){
+  const p = tctx.getImageData(0,0,tiny.width,tiny.height).data;
   let sum = 0;
   for(let i=0;i<p.length;i+=4) sum += 0.299*p[i] + 0.587*p[i+1] + 0.114*p[i+2];
-  const mean = sum/n;
+  shadeMean = sum/(p.length/4)/255;
+}
+
+// Chemin sans carte graphique : la nuance doit être cuite dans le bitmap,
+// puisqu'il n'y a pas de nuanceur pour la calculer au vol.
+function bakeShading(){
+  const d = tctx.getImageData(0,0,tiny.width,tiny.height), p = d.data;
+  const mean = shadeMean*255;
   // gris moyen = tissu inchangé ; plus clair = éclairé, plus sombre = ombré
   for(let i=0;i<p.length;i+=4){
     const l = 0.299*p[i] + 0.587*p[i+1] + 0.114*p[i+2];
@@ -283,7 +849,23 @@ function buildShading(){
 lctx.globalCompositeOperation = 'soft-light';
 const BLEND = lctx.globalCompositeOperation === 'soft-light' ? 'soft-light' : 'multiply';
 lctx.globalCompositeOperation = 'source-over';
-const statusEl = $('status'), hint = $('hint');
+const hint = $('hint');
+/* Le moteur pose son statut ici. L'interface le transforme en bandeau
+   ephemere plutot qu'en ligne fixe : rien ne doit occuper le miroir. */
+const ERRS = /illisible|impossible|refus|interrompu|satur|trop courte|indisponible|echec|Ã©chec/i;
+const statusEl = {
+  style:{},
+  get textContent(){ return ''; },
+  set textContent(v){ if(uiToast) uiToast(v, ERRS.test(v)); }
+};
+
+// Le bandeau d'aide était réécrit à chaque image, presque toujours avec le
+// même texte. On ne touche au document que lorsque quelque chose change.
+let hintTxt = null, hintOp = null;
+function setHint(t, op){
+  if(t != null && t !== hintTxt){ hint.textContent = t; hintTxt = t; }
+  if(op != null && op !== hintOp){ hint.style.opacity = op; hintOp = op; }
+}
 
 /* ---------------------------------------------------------------
    Points d'ancrage du vêtement, en fractions de son image.
@@ -300,6 +882,7 @@ let visionFiles = null;
 let segImg = null;
 
 function refreshSlots(active){
+  if(uiSyncDock) uiSyncDock();
   for(const b of document.querySelectorAll('.vw')){
     const s = b.dataset.slot;
     b.dataset.filled = views[s] ? 'true' : 'false';
@@ -315,7 +898,9 @@ function mirrorView(v){
   c.width = v.cv.width; c.height = v.cv.height;
   const g = c.getContext('2d');
   g.translate(c.width,0); g.scale(-1,1); g.drawImage(v.cv,0,0);
-  v.mirror = { cv:c, anch:{ x1:1-v.anch.x2, x2:1-v.anch.x1, sy:v.anch.sy, hy:v.anch.hy } };
+  const a = v.anch;
+  v.mirror = { cv:c, anch:{ x1:1-a.x2, x2:1-a.x1, sy:a.sy, hy:a.hy,
+    arm: a.arm ? { x:1-a.arm.x, y:a.arm.y, hw:a.arm.hw } : null } };
   return v.mirror;
 }
 
@@ -372,15 +957,21 @@ COLORS.forEach((col,i)=>{
   b.setAttribute('aria-pressed', i===0?'true':'false');
   b.setAttribute('aria-label','Couleur '+col);
   b.onclick = ()=>{
-    views.face = { cv:makeTee(col), anch:{ ...A_DEF } };
-    views.profil = views.dos = null;
+    // Une pastille ne remplace que le t-shirt dessiné. Écraser une photo
+    // calibrée d'un simple effleurement, et emporter le profil et le dos
+    // avec elle, faisait perdre tout le travail de calibration.
+    if(views.face && !views.face.gen &&
+       !confirm('Remplacer la photo calibrée de face par le t-shirt uni ?')) return;
+    dropView(views.face);
+    views.face = { cv:makeTee(col), anch:{ ...A_DEF }, gen:true };
     refreshSlots('face');
+    saveViews();
     [...swWrap.children].forEach(x=>x.setAttribute('aria-pressed','false'));
     b.setAttribute('aria-pressed','true');
   };
   swWrap.appendChild(b);
 });
-views.face = { cv:makeTee(COLORS[0]), anch:{ ...A_DEF } };
+views.face = { cv:makeTee(COLORS[0]), anch:{ ...A_DEF }, gen:true };
 refreshSlots('face');
 
 for(const b of document.querySelectorAll('.vw')){
@@ -395,8 +986,9 @@ const loadImage = src => new Promise((ok,ko)=>{
 $('file').onchange = async e => {
   const f = e.target.files[0]; if(!f) return;
   statusEl.textContent = 'Ouverture…';
+  const url = URL.createObjectURL(f);
   try{
-    const img = await loadImage(URL.createObjectURL(f));
+    const img = await loadImage(url);
     const max = 700;
     const s = Math.min(1, max/Math.max(img.width,img.height));
     const c = document.createElement('canvas');
@@ -407,6 +999,8 @@ $('file').onchange = async e => {
   }catch(err){
     statusEl.textContent = 'Photo illisible';
     statusEl.style.color = 'var(--alert)';
+  }finally{
+    URL.revokeObjectURL(url);
   }
   e.target.value = '';
 };
@@ -422,6 +1016,7 @@ const copyCv = src => {
 };
 
 function startCut(cv){
+  if(uiMode) uiMode('edit');
   cut = { orig:cv, work:copyCv(cv) };
   canvas.width = cv.width; canvas.height = cv.height;
   $('cutbar').style.display = 'flex';
@@ -436,8 +1031,7 @@ function drawCut(){
     ctx.fillRect(x,y,s,s);
   }
   ctx.drawImage(cut.work,0,0);
-  hint.textContent = 'Touchez le fond à effacer, puis Valider';
-  hint.style.opacity = '0';
+  setHint('Touchez le fond à effacer, puis Valider', '0');
 }
 
 async function autoCut(){
@@ -537,6 +1131,7 @@ const STEPS = ['Touchez la couture d\u2019épaule gauche',
                'Touchez le bout de la manche gauche'];
 
 function startCalib(cv){
+  if(uiMode) uiMode('edit');
   calib = { cv, pts:[] };
   canvas.width = cv.width; canvas.height = cv.height;
   drawCalib();
@@ -558,8 +1153,7 @@ function drawCalib(){
       ctx.stroke();
     }
   });
-  hint.textContent = STEPS[calib.pts.length];
-  hint.style.opacity = '1';
+  setHint(STEPS[calib.pts.length], '1');
 }
 
 // demi-largeur de la manche, mesurée sur la transparence de la photo
@@ -606,7 +1200,7 @@ canvas.addEventListener('pointerdown', ev => {
   const l = a.x <= b.x ? a : b, rr = a.x <= b.x ? b : a;
   if(rr.x - l.x < 0.10){                 // deux touchers trop rapprochés
     calib.pts = [];
-    hint.textContent = 'Épaules trop rapprochées, reprenons';
+    setHint('Épaules trop rapprochées, reprenons', '1');
     drawCalib(); return;
   }
   const anch = {
@@ -614,12 +1208,15 @@ canvas.addEventListener('pointerdown', ev => {
     hy:Math.max(c3.y,(a.y+b.y)/2+0.05),
     arm:{ x:c4.x, y:c4.y, hw:sleeveHalfWidth(calib.cv, l, c4) }
   };
+  dropView(views[slot]);
   views[slot] = { cv:calib.cv, anch, mirror:null };
   calib = null;
   refreshSlots(slot);
   saveViews();
-  $('btnRecal').style.display = 'block';
-  hint.textContent = 'Reculez pour cadrer épaules et hanches';
+  if(uiCalibrated) uiCalibrated();
+  if(uiMode) uiMode('live');
+  $('btnRecal').dataset.ready = '1';
+  setHint('Reculez pour cadrer épaules et hanches', null);
   if(video){ canvas.width = video.videoWidth; canvas.height = video.videoHeight; }
 });
 
@@ -629,16 +1226,20 @@ canvas.addEventListener('pointerdown', ev => {
    --------------------------------------------------------------- */
 const STORE = 'cabine.views';
 
+// on réduit avant de stocker : le quota du navigateur est vite atteint
+function packView(v){
+  if(!v) return null;
+  const s = Math.min(1, 512/Math.max(v.cv.width, v.cv.height));
+  const c = document.createElement('canvas');
+  c.width = Math.round(v.cv.width*s); c.height = Math.round(v.cv.height*s);
+  c.getContext('2d').drawImage(v.cv, 0, 0, c.width, c.height);
+  return { img:c.toDataURL('image/png'), anch:v.anch };
+}
+
 function serialiseViews(){
   const out = {};
-  for(const k of ['face','profil','dos']){
-    if(!views[k]) continue;
-    const v = views[k], sc = Math.min(1, 512/Math.max(v.cv.width, v.cv.height));
-    const c = document.createElement('canvas');
-    c.width = Math.round(v.cv.width*sc); c.height = Math.round(v.cv.height*sc);
-    c.getContext('2d').drawImage(v.cv, 0, 0, c.width, c.height);
-    out[k] = { img:c.toDataURL('image/png'), anch:v.anch };
-  }
+  for(const k of ['face','profil','dos'])
+    if(views[k]) out[k] = packView(views[k]);
   return out;
 }
 
@@ -647,20 +1248,44 @@ function saveViews(){
   catch(e){ /* quota atteint : on continue sans sauvegarde */ }
 }
 
+/* Un fichier de vêtement vient de n'importe qui. Sans contrôle, le champ
+   « img » accepterait une adresse http distante — un pixel espion déclenché
+   à l'import — et des ancrages non numériques suffiraient à figer le rendu
+   sur des NaN. On n'accepte donc qu'une image embarquée et des fractions. */
+const num = (v, lo, hi, def) =>
+  (typeof v === 'number' && isFinite(v) && v >= lo && v <= hi) ? v : def;
+
+function cleanAnch(a){
+  if(!a || typeof a !== 'object') return null;
+  const x1 = num(a.x1, 0, 1, null), x2 = num(a.x2, 0, 1, null);
+  if(x1 === null || x2 === null || x2 - x1 < 0.05) return null;
+  const sy = num(a.sy, 0, 1, 0.145);
+  const out = { x1, x2, sy, hy: num(a.hy, 0, 1, Math.min(1, sy + 0.5)) };
+  if(a.arm && typeof a.arm === 'object'){
+    const ax = num(a.arm.x, -0.5, 1.5, null), ay = num(a.arm.y, 0, 1, null);
+    if(ax !== null && ay !== null)
+      out.arm = { x:ax, y:ay, hw: num(a.arm.hw, 0.001, 0.5, 0.045) };
+  }
+  return out;
+}
+
 async function loadViews(obj){
   let n = 0;
   for(const k of ['face','profil','dos']){
     if(!obj || !obj[k]) continue;
+    const src = obj[k].img, anch = cleanAnch(obj[k].anch);
+    if(typeof src !== 'string' || !src.startsWith('data:image/') || !anch) continue;
     try{
-      const img = await loadImage(obj[k].img);
+      const img = await loadImage(src);
       const c = document.createElement('canvas');
       c.width = img.width; c.height = img.height;
       c.getContext('2d', { willReadFrequently:true }).drawImage(img,0,0);
-      views[k] = { cv:c, anch:obj[k].anch, mirror:null };
+      dropView(views[k]);
+      views[k] = { cv:c, anch, mirror:null };
       n++;
     }catch(e){ /* vue illisible : on passe */ }
   }
-  if(n){ refreshSlots('face'); $('btnRecal').style.display = 'block'; }
+  if(n){ refreshSlots('face'); $('btnRecal').dataset.ready = '1'; }
   return n;
 }
 
@@ -725,8 +1350,7 @@ $('hCm').oninput = ()=> $('vHCm').textContent = $('hCm').value + ' cm';
 $('btnMeasure').onclick = ()=>{
   if(!video){ statusEl.textContent = 'Ouvrez la caméra d\u2019abord'; return; }
   measuring = { t0: performance.now(), samples: [] };
-  hint.textContent = 'Mesure en cours, tenez-vous droit';
-  hint.style.opacity = '1';
+  setHint('Mesure en cours, tenez-vous droit', '1');
 };
 
 // barèmes usuels, en tour de poitrine (cm)
@@ -741,7 +1365,7 @@ const median = a => { const b=[...a].sort((x,y)=>x-y); return b[b.length>>1]; };
 function finishMeasure(){
   const S = measuring.samples;
   measuring = null;
-  hint.textContent = 'Reculez pour cadrer épaules et hanches';
+  setHint('Reculez pour cadrer épaules et hanches', null);
   if(S.length < 8){ statusEl.textContent = 'Mesure trop courte'; return; }
 
   const H = +$('hCm').value;
@@ -769,35 +1393,54 @@ function finishMeasure(){
   $('sizeNote').innerHTML = sure
     ? 'Mesure d\u2019après votre stature. <b>Comptez une taille d\u2019écart possible</b> selon la coupe du vêtement.'
     : 'Chevilles hors cadre : échelle déduite de proportions moyennes. <b>Refaites-la en pied</b> pour un résultat fiable.';
-  statusEl.textContent = 'En direct';
+  if(uiMeasured) uiMeasured(sure);
 }
 
 const cfg = { width:1.05, length:1.25, offset:0.02, shade:0.7, smooth:0.45, opacity:1 };
-const bind = (id,key,fmt)=>{
-  const el = $(id), out = $('v'+id.slice(1));
-  el.oninput = ()=>{ cfg[key] = +el.value; out.textContent = fmt(+el.value); };
+/* Un multiplicateur de 1,05x ne dit rien a personne. On affiche la
+   position du curseur sur sa course ; la valeur reelle, elle, ne change pas. */
+const bind = (id,key)=>{
+  const r = $(id), out = $('v'+id.slice(1));
+  const show = ()=>{ out.textContent =
+    Math.round((r.value - r.min)/(r.max - r.min)*100) + ' %'; };
+  r.oninput = ()=>{ cfg[key] = +r.value; show(); };
+  show();
 };
-bind('sWidth','width',   v=>v.toFixed(2)+'×');
-bind('sLength','length', v=>v.toFixed(2)+'×');
-bind('sOffset','offset', v=>v.toFixed(2));
-bind('sShade','shade',   v=>Math.round(v*100)+' %');
-bind('sSmooth','smooth', v=>v.toFixed(2));
-bind('sOpacity','opacity',v=>Math.round(v*100)+' %');
+bind('sWidth','width');   bind('sLength','length');  bind('sOffset','offset');
+bind('sShade','shade');   bind('sSmooth','smooth');  bind('sOpacity','opacity');
 
 /* --------------------------------------------------------------- */
 const MODEL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
 const SEG   = "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_multiclass_256x256/float32/latest/selfie_multiclass_256x256.tflite";
 const WASM  = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
-let landmarker, segmenter = null, video, lastT = -1, smoothed = null;
+let landmarker, segmenter = null, video, lastT = -1;
 let fpsT = performance.now(), fpsN = 0;
 let yaw = null, band = 'face';
 // écart angulaire le plus court, pour lisser sans sauter à ±180°
 const angDiff = (a,b)=>{ let d=(a-b)%360; if(d>180)d-=360; if(d<-180)d+=360; return d; };
 
-// masque de peau, reconstruit à chaque image
+/* Les points lissés vivaient dans un tableau reconstruit deux fois par image :
+   soixante-six objets jetés à chaque tour, que le ramasse-miettes finissait
+   par venir réclamer en plein rendu. On garde le même tableau et on écrit
+   dedans. */
+let P = null, poseInit = false;
+function ensurePose(n){
+  if(P && P.length === n) return;
+  P = new Array(n);
+  for(let i=0;i<n;i++) P[i] = { x:0, y:0, v:0 };
+  poseInit = false;
+}
+
+// masque de peau, reconstruit une image sur segEvery
 const maskCv = document.createElement('canvas');
 const mctx = maskCv.getContext('2d');
-let maskImg = null, maskReady = false, maskDirty = false, segFrame = 0;
+let maskImg = null, mask32 = null, maskReady = false, maskDirty = false, segFrame = 0;
+
+/* Cadence de segmentation adaptative. La peau ne se déplace pas d'une image
+   à l'autre, alors qu'un passage du réseau coûte plusieurs millisecondes :
+   quand la machine peine, on l'espace au lieu de laisser tomber des images. */
+let segEvery = 2, cost = 16, tune = 0;
+const readout = { tick:0 };
 
 $('btnStart').onclick = boot;
 
@@ -806,11 +1449,15 @@ async function boot(){
   try{
     if(!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) throw new Error('CONTEXTE');
     startEl.style.display='none';
-    statusEl.style.color='var(--brass)';
+    booting = true;
 
     statusEl.textContent = 'Accès caméra…';
+    // Plafonner à 30 images/seconde : le réseau de pose tourne une fois par
+    // image de la caméra, et sur une webcam 60 Hz c'était deux fois le travail
+    // nécessaire pour un vêtement qui, lui, ne bouge pas plus vite.
     const stream = await navigator.mediaDevices.getUserMedia({
-      video:{ width:{ideal:960}, height:{ideal:540}, facingMode:'user' }, audio:false });
+      video:{ width:{ideal:960}, height:{ideal:540}, facingMode:'user',
+              frameRate:{ ideal:30, max:30 } }, audio:false });
     video = $('cam'); video.srcObject = stream; await video.play();
     if(!video.videoWidth) await new Promise(r => video.onloadedmetadata = r);
 
@@ -839,12 +1486,14 @@ async function boot(){
 
     canvas.width = layer.width  = video.videoWidth  || 960;
     canvas.height = layer.height = video.videoHeight || 540;
-    statusEl.textContent = 'En direct';
+    booting = false;
+    if(uiReady) uiReady();
     requestAnimationFrame(loop);
 
   }catch(err){
     startEl.style.display='flex';
-    statusEl.textContent='Interrompu'; statusEl.style.color='var(--alert)';
+    booting = false;
+    statusEl.textContent='Ouverture interrompue';
     const m = { CONTEXTE:"Cette page doit être servie en <b>https://</b> ou <b>http://localhost</b>.",
       NotAllowedError:"Autorisation refusée. Réglages → Safari → Caméra → Demander, puis rechargez.",
       NotFoundError:"Aucune caméra détectée.",
@@ -858,21 +1507,46 @@ const SK = [[11,12],[11,23],[12,24],[23,24],[11,13],[13,15],[12,14],[14,16],[23,
 function loop(){
   requestAnimationFrame(loop);
   if(calib || cut) return;
+  // onglet en arrière-plan, ou utilisateur parti sur un autre écran :
+  // la caméra tourne encore, mais inférer ne servirait à personne
+  if(document.hidden || !liveOn) return;
   if(video.currentTime === lastT) return;
   lastT = video.currentTime;
+
+  const t0 = performance.now();
+
+  // la mesure s'arrête au bout de trois secondes même si la pose est perdue :
+  // dans la version précédente, sortir du cadre la laissait tourner sans fin
+  if(measuring){
+    if(uiCalibTick) uiCalibTick(Math.min(1, (t0 - measuring.t0)/3000));
+    if(t0 - measuring.t0 > 3000) finishMeasure();
+  }
 
   const W = canvas.width, H = canvas.height;
   ctx.save(); ctx.translate(W,0); ctx.scale(-1,1); ctx.drawImage(video,0,0,W,H); ctx.restore();
 
-  const res = landmarker.detectForVideo(video, performance.now());
+  const res = landmarker.detectForVideo(video, t0);
   const lm = res.landmarks?.[0];
+  const show = ++readout.tick % 5 === 0;   // les compteurs à 6 Hz suffisent
 
   if(lm){
-    const raw = lm.map(p=>({ x:(1-p.x)*W, y:p.y*H, v:p.visibility ?? 1 }));
+    const n = lm.length;
+    ensurePose(n);
     const a = cfg.smooth;
-    if(!smoothed || smoothed.length !== raw.length) smoothed = raw;
-    else smoothed = smoothed.map((s,i)=>({ x:s.x+(raw[i].x-s.x)*a, y:s.y+(raw[i].y-s.y)*a, v:raw[i].v }));
-    const P = smoothed;
+    if(!poseInit){
+      for(let i=0;i<n;i++){
+        const p = lm[i], q = P[i];
+        q.x = (1-p.x)*W; q.y = p.y*H; q.v = p.visibility ?? 1;
+      }
+      poseInit = true;
+    }else{
+      for(let i=0;i<n;i++){
+        const p = lm[i], q = P[i];
+        q.x += ((1-p.x)*W - q.x)*a;
+        q.y += (p.y*H - q.y)*a;
+        q.v = p.visibility ?? 1;
+      }
+    }
 
     const sm = mid(P[11],P[12]), hm = mid(P[23],P[24]);
     const shoulderW = dist(P[11],P[12]);
@@ -889,7 +1563,6 @@ function loop(){
       const ank = (P[27].v > 0.5 && P[28].v > 0.5) ? (P[27].y + P[28].y)/2 : 0;
       const stature = (ank && P[0].v > 0.5) ? (ank - P[0].y)/0.891 : 0;
       if(conf > 0.6) measuring.samples.push({ sh:shoulderW, stature });
-      if(performance.now() - measuring.t0 > 3000) finishMeasure();
     }
 
     // rotation du buste. Le modèle sait de quel côté est votre épaule gauche :
@@ -915,22 +1588,21 @@ function loop(){
 
     let view = views[band] || views.face;
     if(band==='profil' && views.profil && (yaw ?? 0) < 0) view = mirrorView(views.profil);
-    const LABEL = { face:'FACE', profil:'PROFIL', dos:'DOS' };
-    $('mView').textContent = (views[band] ? LABEL[band] : LABEL[band]+'*') +
-                             ' · ' + Math.round(yaw ?? 0) + '°';
 
-    $('mShoulder').textContent = Math.round(shoulderW)+' px';
-    $('mTorso').textContent    = Math.round(torso)+' px';
-    $('mAngle').textContent    = (tilt*180/Math.PI).toFixed(1)+'°';
-    if(cropped){
-      hint.textContent = 'Reculez : vos hanches sortent du cadre';
-      hint.style.opacity = '1';
-    }else{
-      hint.textContent = 'Reculez pour cadrer épaules et hanches';
-      hint.style.opacity = conf > 0.6 ? '0' : '1';
+    // Écrire dans le panneau force le navigateur à recalculer la mise en page.
+    // Personne ne lit un compteur qui change soixante fois par seconde.
+    if(show){
+      const LABEL = { face:'FACE', profil:'PROFIL', dos:'DOS' };
+      elView.textContent = (views[band] ? LABEL[band] : LABEL[band]+'*') +
+                           ' · ' + Math.round(yaw ?? 0) + '°';
+      elShoulder.textContent = Math.round(shoulderW)+' px';
+      elTorso.textContent    = Math.round(torso)+' px';
+      elAngle.textContent    = (tilt*180/Math.PI).toFixed(1)+'°';
     }
+    if(!measuring && uiGuide)
+      uiGuide(cropped ? 'crop' : conf <= 0.6 ? 'seek' : 'ok');
 
-    if($('cGarment').checked && conf > 0.5 && shoulderW > 20 && torsoRaw > 20){
+    if(elGarment.checked && conf > 0.5 && shoulderW > 20 && torsoRaw > 20){
       // épaule gauche / droite à l'écran, avec le coude du même côté
       const leftIs11 = P[11].x <= P[12].x;
       const pL = leftIs11 ? P[11] : P[12], eL = leftIs11 ? P[13] : P[14];
@@ -951,11 +1623,14 @@ function loop(){
       const gw = G.width, gh = G.height;
       const seam = (N.x2-N.x1)*gw;                  // écart des coutures d'épaule
 
+      // Les tracés de découpe ne servent qu'au rendu de secours sur processeur.
+      // Avec la carte graphique, seuls les os comptent : construire des Path2D
+      // soixante fois par seconde pour les jeter aussitôt était du gaspillage.
       const pieces = [], holes = [], bones = [];
-      const rect = (x,y,w,h)=>{ const p = new Path2D(); p.rect(x,y,w,h); return p; };
+      let nSleeve = 0;
 
       let why = '';
-      if(!$('cSleeves').checked)          why = 'désactivées';
+      if(!elSleeves.checked)              why = 'désactivées';
       else if(band === 'profil')          why = 'vue de profil';
       else if(Math.min(eL.v,eR.v) <= 0.4) why = 'coudes non vus';
       else if(!N.arm)                     why = 'axe non calibré';
@@ -976,7 +1651,7 @@ function loop(){
         for(const [S,E,Wp,seamF,cuffF] of arms){
           const ax = seamF.x*gw, ay = seamF.y*gh;
           const bx = cuffF.x*gw, by = cuffF.y*gh;
-          const axisL = Math.hypot(bx-ax, by-ay);
+          const axisL = hyp(bx-ax, by-ay);
           if(axisL < gw*0.06) continue;
 
           // normale à l'axe, orientée vers le centre du vêtement (l'aisselle)
@@ -986,7 +1661,7 @@ function loop(){
           // même si la mesure sur la photo dit le contraire
           const hwPx = Math.min(Math.max(cuffF.hw*gw, 0.16*seam), 0.42*seam);
 
-          const upper = Math.hypot(E.x-S.x, E.y-S.y);
+          const upper = hyp(E.x-S.x, E.y-S.y);
           if(upper < 8) continue;
           const d1x = (E.x-S.x)/upper, d1y = (E.y-S.y)/upper;
 
@@ -994,7 +1669,7 @@ function loop(){
           let px = hm.x-S.x, py = hm.y-S.y;
           const dp = px*d1x + py*d1y;
           px -= d1x*dp; py -= d1y*dp;
-          const pn = Math.hypot(px,py) || 1; px /= pn; py /= pn;
+          const pn = hyp(px,py) || 1; px /= pn; py /= pn;
 
           // aucune manche ne dépasse deux fois et demie la carrure
           const len = Math.min(axisL*scale, shoulderW*2.5);
@@ -1009,24 +1684,25 @@ function loop(){
             p.lineTo(x1-nx*e0, y1-ny*e0); p.lineTo(x0-nx*e0, y0-ny*e0);
             p.closePath(); return p;
           };
-          holes.push(quad(-0.02, 1.06, hwPx));
+          if(!MESH_OK) holes.push(quad(-0.02, 1.06, hwPx));
           const at = t => ({ x:ax+(bx-ax)*t, y:ay+(by-ay)*t });
           const perpAt = (t,s) => ({ x:ax+(bx-ax)*t+nx*s, y:ay+(by-ay)*t+ny*s });
 
           if(len <= upper*1.03 || Wp.v < 0.4){
             const m1 = aff(at(0), at(1), perpAt(0,hwPx),
                            S, {x:S.x+d1x*len, y:S.y+d1y*len}, {x:S.x+px*thick, y:S.y+py*thick});
-            pieces.push({ m:m1, clip:quad(-0.06, 1.10, hwPx*1.15) });
+            if(!MESH_OK) pieces.push({ m:m1, clip:quad(-0.06, 1.10, hwPx*1.15) });
             bones.push({ ax, ay, bx, by, m:m1, r:hwPx*1.35 });
+            nSleeve++;
             continue;
           }
 
           const tm = upper/len;                    // le coude, sur l'axe de la photo
-          const fore = Math.hypot(Wp.x-E.x, Wp.y-E.y) || 1;
+          const fore = hyp(Wp.x-E.x, Wp.y-E.y) || 1;
           const d2x = (Wp.x-E.x)/fore, d2y = (Wp.y-E.y)/fore;
           const dq = px*d2x + py*d2y;
           let qx = px - d2x*dq, qy = py - d2y*dq;
-          const qn = Math.hypot(qx,qy) || 1; qx /= qn; qy /= qn;
+          const qn = hyp(qx,qy) || 1; qx /= qn; qy /= qn;
           const rest = len - upper, thick2 = thick*0.82;
 
           // avant-bras d'abord : le bras se superpose proprement au coude
@@ -1034,8 +1710,11 @@ function loop(){
                          E, {x:E.x+d2x*rest, y:E.y+d2y*rest}, {x:E.x+qx*thick2, y:E.y+qy*thick2});
           const mU = aff(at(0), at(tm), perpAt(0,hwPx),
                          S, E, {x:S.x+px*thick, y:S.y+py*thick});
-          pieces.push({ m:mF, clip:quad(tm, 1.10, hwPx*1.15) });
-          pieces.push({ m:mU, clip:quad(-0.06, tm, hwPx*1.15) });
+          if(!MESH_OK){
+            pieces.push({ m:mF, clip:quad(tm, 1.10, hwPx*1.15) });
+            pieces.push({ m:mU, clip:quad(-0.06, tm, hwPx*1.15) });
+          }
+          nSleeve += 2;
           const A = at(0), M = at(tm), B = at(1);
           bones.push({ ax:M.x, ay:M.y, bx:B.x, by:B.y, m:mF, r:hwPx*1.35 });
           bones.push({ ax:A.x, ay:A.y, bx:M.x, by:M.y, m:mU, r:hwPx*1.35 });
@@ -1047,31 +1726,35 @@ function loop(){
         {x:N.x1*gw, y:N.sy*gh}, {x:N.x2*gw, y:N.sy*gh}, {x:(N.x1+N.x2)/2*gw, y:N.hy*gh},
         Ap, Bp, Cp
       );
-      let clipT = null;
-      if(holes.length){
-        clipT = new Path2D();
-        clipT.rect(0, 0, gw, gh);
-        for(const h of holes) clipT.addPath(h);
+      if(!MESH_OK){
+        let clipT = null;
+        if(holes.length){
+          clipT = new Path2D();
+          clipT.rect(0, 0, gw, gh);
+          for(const h of holes) clipT.addPath(h);
+        }
+        pieces.push({ m:mT, clip:clipT, rule:'evenodd' });
       }
-      pieces.push({ m:mT, clip:clipT, rule:'evenodd' });
 
-      // masque de peau : recalculé une image sur deux, il change lentement
-      const occOn = !!(segmenter && $('cOcclusion').checked);
+      // masque de peau : recalculé une image sur segEvery, il change lentement
+      const occOn = !!(segmenter && elOcclusion.checked);
       if(occOn){
         try{
-          if((segFrame++ & 1) === 0){
-            const seg = segmenter.segmentForVideo(video, performance.now());
+          if(segFrame++ % segEvery === 0){
+            const seg = segmenter.segmentForVideo(video, t0);
             const cm = seg.categoryMask;
             const mw = cm.width, mh = cm.height, arr = cm.getAsUint8Array();
             if(!maskImg || maskCv.width !== mw || maskCv.height !== mh){
               maskCv.width = mw; maskCv.height = mh;
               maskImg = mctx.createImageData(mw,mh);
+              // une vue 32 bits sur le même tampon : un pixel du masque est
+              // soit blanc opaque soit transparent, donc une seule écriture
+              // au lieu de quatre, sur les soixante-cinq mille pixels
+              mask32 = new Uint32Array(maskImg.data.buffer);
             }
-            const md = maskImg.data;
-            for(let i=0, j=0; i<arr.length; i++, j+=4){
+            for(let i=0;i<arr.length;i++){
               const c = arr[i];                     // 1 cheveux, 2 peau, 3 visage
-              md[j] = md[j+1] = md[j+2] = 255;
-              md[j+3] = (c===1 || c===2 || c===3) ? 255 : 0;
+              mask32[i] = (c===1 || c===2 || c===3) ? 0xFFFFFFFF : 0;
             }
             mctx.putImageData(maskImg,0,0);
             cm.close();
@@ -1081,7 +1764,11 @@ function loop(){
       }
 
       const alpha = cfg.opacity * Math.min(1,(conf-0.5)*4);
-      if(cfg.shade > 0.01) buildShading();
+      if(cfg.shade > 0.01){
+        drawTiny();
+        if(meanTick++ % MEAN_EVERY === 0) updateMean();
+        if(!MESH_OK) bakeShading();
+      }
 
       if(MESH_OK){
         // tissu, éclairage et occlusion en une seule passe sur la carte graphique
@@ -1120,9 +1807,9 @@ function loop(){
         ctx.globalAlpha = 1;
       }
 
-      $('mSleeve').textContent = sleeves ? (pieces.length-0)+' pièces' : why;
+      if(show) elSleeve.textContent = sleeves ? nSleeve+' pièces' : why;
 
-      if($('cSkeleton').checked && sleeves){
+      if(elSkeleton.checked && sleeves){
         ctx.strokeStyle = 'rgba(196,102,74,.9)'; ctx.lineWidth = 3;
         for(const [S,E,Wp] of [[pL,eL,leftIs11?P[15]:P[16]],[pR,eR,leftIs11?P[16]:P[15]]]){
           ctx.beginPath(); ctx.moveTo(S.x,S.y); ctx.lineTo(E.x,E.y);
@@ -1133,20 +1820,32 @@ function loop(){
 
     }
 
-    if($('cSkeleton').checked){
+    if(elSkeleton.checked){
       ctx.strokeStyle='rgba(200,164,92,.85)'; ctx.lineWidth=2;
       for(const [i,j] of SK){ ctx.beginPath(); ctx.moveTo(P[i].x,P[i].y); ctx.lineTo(P[j].x,P[j].y); ctx.stroke(); }
       ctx.fillStyle='#EDE6DA';
       for(const i of [11,12,23,24]){ ctx.beginPath(); ctx.arc(P[i].x,P[i].y,4,0,6.284); ctx.fill(); }
     }
   }else{
-    smoothed = null; hint.style.opacity='1';
-    $('mShoulder').textContent = $('mTorso').textContent = $('mAngle').textContent = '—';
+    poseInit = false; if(uiGuide) uiGuide('seek');
+    if(show) elShoulder.textContent = elTorso.textContent = elAngle.textContent = '—';
+  }
+
+  /* Réglage automatique. On suit le coût réel d'une image par moyenne
+     glissante, et on espace la segmentation quand la machine décroche.
+     Mieux vaut un masque de peau rafraîchi trois fois moins souvent —
+     il bouge lentement — qu'un vêtement qui saute. */
+  const spent = performance.now() - t0;
+  cost += (spent - cost) * 0.1;
+  if(++tune >= 30){
+    tune = 0;
+    if(cost > 24 && segEvery < 5) segEvery++;
+    else if(cost < 13 && segEvery > 2) segEvery--;
   }
 
   if(++fpsN >= 15){
     const now = performance.now();
-    $('mFps').textContent = Math.round(fpsN*1000/(now-fpsT));
+    elFps.textContent = Math.round(fpsN*1000/(now-fpsT)) + (segEvery > 2 ? ' ·' : '');
     fpsT = now; fpsN = 0;
   }
 }
@@ -1158,13 +1857,29 @@ function loop(){
    --------------------------------------------------------------- */
 const warpCv = document.createElement('canvas');
 const GX = 22, GY = 28;
-let gl = null, glProg = null, glPos = null, glUV = null, glIdx = null;
+let glProg = null, glPos = null, glUV = null, glIdx = null;
 let uvArr = null, posArr = null, alphaArr = null, idxCount = 0;
 let glA = null, texShade = null, texMask = null;
-const texCache = new WeakMap();
+let U = null, At = null;              // emplacements, résolus une seule fois
+let maskTexW = 0, maskTexH = 0;
+
+// libère la texture d'une vue remplacée : la carte graphique ne récupère pas
+// ces objets toute seule, et changer de couleur en boucle les accumulait
+function dropView(v){
+  if(!v || !gl) return;
+  for(const cv of [v.cv, v.mirror && v.mirror.cv]){
+    if(!cv) continue;
+    const t = texCache.get(cv);
+    if(t){ gl.deleteTexture(t); texCache.delete(cv); }
+  }
+}
 
 function initGL(){
-  gl = warpCv.getContext('webgl', { alpha:true, premultipliedAlpha:false, antialias:true });
+  gl = warpCv.getContext('webgl', {
+    alpha:true, premultipliedAlpha:false, antialias:true,
+    depth:false, stencil:false, preserveDrawingBuffer:false,
+    powerPreference:'high-performance'
+  });
   if(!gl) return false;
 
   const sh = (t,src)=>{ const s = gl.createShader(t); gl.shaderSource(s,src); gl.compileShader(s); return s; };
@@ -1181,7 +1896,7 @@ function initGL(){
     precision mediump float;
     varying vec2 vUV; varying vec2 vScr; varying float vA;
     uniform sampler2D uTex, uShade, uMask;
-    uniform float uShadeAmt, uOcc, uAlpha;
+    uniform float uShadeAmt, uOcc, uAlpha, uMean;
     vec3 softLight(vec3 b, float s){
       return (s <= 0.5) ? b - (1.0-2.0*s)*b*(1.0-b)
                         : b + (2.0*s-1.0)*(sqrt(b)-b);
@@ -1190,8 +1905,11 @@ function initGL(){
       vec4 c = texture2D(uTex, vUV);
       if(c.a < 0.02) discard;
       if(uShadeAmt > 0.01){
-        float l = texture2D(uShade, vScr).r;
-        c.rgb = mix(c.rgb, softLight(c.rgb, l), uShadeAmt);
+        // la texture est la vidéo réduite, encore en couleur : on en tire la
+        // luminance ici plutôt que de la cuire au processeur avant l'envoi
+        float l = dot(texture2D(uShade, vScr).rgb, vec3(0.299, 0.587, 0.114));
+        float s = clamp(0.5 + (l - uMean) * 1.5, 0.0, 1.0);
+        c.rgb = mix(c.rgb, softLight(c.rgb, s), uShadeAmt);
       }
       float a = c.a * vA * uAlpha;
       if(uOcc > 0.5){
@@ -1204,6 +1922,14 @@ function initGL(){
   if(!gl.getProgramParameter(glProg, gl.LINK_STATUS)){ gl = null; return false; }
   gl.useProgram(glProg);
 
+  // getUniformLocation et getAttribLocation sont des recherches par nom qui
+  // traversent le pilote. Huit par image, c'était huit de trop.
+  U = {};
+  for(const k of ['uRes','uShadeAmt','uOcc','uAlpha','uMean','uTex','uShade','uMask'])
+    U[k] = gl.getUniformLocation(glProg, k);
+  At = {};
+  for(const k of ['aPos','aUV','aA']) At[k] = gl.getAttribLocation(glProg, k);
+
   const uv = [], idx = [];
   for(let j=0;j<=GY;j++) for(let i=0;i<=GX;i++) uv.push(i/GX, j/GY);
   for(let j=0;j<GY;j++) for(let i=0;i<GX;i++){
@@ -1215,7 +1941,7 @@ function initGL(){
   idxCount = idx.length;
 
   alphaArr = new Float32Array(uv.length/2);
-  glA = gl.createBuffer();
+
   texShade = gl.createTexture();
   texMask  = gl.createTexture();
   for(const t of [texShade, texMask]){
@@ -1225,17 +1951,48 @@ function initGL(){
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
   }
+  // texImage2D réalloue la texture à chaque appel ; texSubImage2D se contente
+  // d'écrire dedans. On dimensionne donc l'ombrage dès maintenant.
+  gl.bindTexture(gl.TEXTURE_2D, texShade);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, tiny.width, tiny.height, 0,
+                gl.RGBA, gl.UNSIGNED_BYTE, null);
+
   glUV = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, glUV);
   gl.bufferData(gl.ARRAY_BUFFER, uvArr, gl.STATIC_DRAW);
   glPos = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, glPos);
+  gl.bufferData(gl.ARRAY_BUFFER, posArr.byteLength, gl.DYNAMIC_DRAW);
+  glA = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, glA);
+  gl.bufferData(gl.ARRAY_BUFFER, alphaArr.byteLength, gl.DYNAMIC_DRAW);
   glIdx = gl.createBuffer();
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, glIdx);
   gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(idx), gl.STATIC_DRAW);
 
+  // état constant d'une image à l'autre : posé une fois, jamais renvoyé
+  gl.bindBuffer(gl.ARRAY_BUFFER, glPos);
+  gl.enableVertexAttribArray(At.aPos);
+  gl.vertexAttribPointer(At.aPos, 2, gl.FLOAT, false, 0, 0);
+  gl.bindBuffer(gl.ARRAY_BUFFER, glA);
+  gl.enableVertexAttribArray(At.aA);
+  gl.vertexAttribPointer(At.aA, 1, gl.FLOAT, false, 0, 0);
+  gl.bindBuffer(gl.ARRAY_BUFFER, glUV);
+  gl.enableVertexAttribArray(At.aUV);
+  gl.vertexAttribPointer(At.aUV, 2, gl.FLOAT, false, 0, 0);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, glIdx);
+
+  gl.uniform1i(U.uTex, 0);
+  gl.uniform1i(U.uShade, 1);
+  gl.uniform1i(U.uMask, 2);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, texShade);
+  gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, texMask);
+  gl.activeTexture(gl.TEXTURE0);
+
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
   gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+  gl.clearColor(0,0,0,0);
   return true;
 }
 
@@ -1253,95 +2010,100 @@ function texFor(cv){
   return t;
 }
 
-const applyM = (m,x,y)=>[ m[0]*x + m[2]*y + m[4], m[1]*x + m[3]*y + m[5] ];
-
 // distance d'un point au segment [a,b], en coordonnées de la photo
 function distSeg(x,y, ax,ay, bx,by){
   const vx = bx-ax, vy = by-ay;
   const L2 = vx*vx + vy*vy || 1;
   let t = ((x-ax)*vx + (y-ay)*vy)/L2;
   t = t<0?0:t>1?1:t;
-  return Math.hypot(x - (ax+vx*t), y - (ay+vy*t));
+  const dx = x - (ax+vx*t), dy = y - (ay+vy*t);
+  return Math.sqrt(dx*dx + dy*dy);
 }
 
 function warpRender(G, gw, gh, mT, bones, W, H, shadeAmt, occ, alpha){
   if(warpCv.width !== W || warpCv.height !== H){ warpCv.width = W; warpCv.height = H; }
 
+  // On sort les coefficients de la matrice du torse de la boucle : lire six
+  // cases d'un tableau six cent fois par image finit par compter.
+  const t0=mT[0], t1=mT[1], t2=mT[2], t3=mT[3], t4=mT[4], t5=mT[5];
+  const nb = bones.length;
+
   for(let k=0, n=uvArr.length; k<n; k+=2){
     const sx = uvArr[k]*gw, sy = uvArr[k+1]*gh;
     let dx = 0, dy = 0, sum = 0, used = 0;
-    for(const b of bones){
+    for(let bi=0; bi<nb; bi++){
+      const b = bones[bi];
       const d = distSeg(sx,sy, b.ax,b.ay, b.bx,b.by);
       if(d >= b.r) continue;
       const t = 1 - d/b.r, w = t*t*t;
-      const p = applyM(b.m, sx, sy);
-      dx += p[0]*w; dy += p[1]*w; sum += w; used += w;
+      const m = b.m;
+      dx += (m[0]*sx + m[2]*sy + m[4])*w;
+      dy += (m[1]*sx + m[3]*sy + m[5])*w;
+      sum += w; used += w;
     }
-    const wt = Math.max(0, 1 - Math.min(1, used));      // le torse reprend le reste
-    const p = applyM(mT, sx, sy);
-    dx += p[0]*wt; dy += p[1]*wt; sum += wt;
+    const wt = used < 1 ? 1 - used : 0;                 // le torse reprend le reste
+    if(wt > 0){
+      dx += (t0*sx + t2*sy + t4)*wt;
+      dy += (t1*sx + t3*sy + t5)*wt;
+      sum += wt;
+    }
     posArr[k] = dx/sum; posArr[k+1] = dy/sum;
   }
 
   // une maille trop étirée n'est plus du tissu : on l'efface au lieu de la filer
-  const refX = Math.hypot(mT[0], mT[1]) * (gw/GX);
-  const refY = Math.hypot(mT[2], mT[3]) * (gh/GY);
+  const refX = hyp(t0, t1) * (gw/GX) || 1;
+  const refY = hyp(t2, t3) * (gh/GY) || 1;
   const row = GX+1;
   for(let j=0;j<=GY;j++) for(let i=0;i<=GX;i++){
     const v = j*row + i, k = v*2;
     const hn = (i<GX ? v+1 : v-1)*2, vn = (j<GY ? v+row : v-row)*2;
-    const ex = Math.hypot(posArr[hn]-posArr[k], posArr[hn+1]-posArr[k+1]) / (refX || 1);
-    const ey = Math.hypot(posArr[vn]-posArr[k], posArr[vn+1]-posArr[k+1]) / (refY || 1);
-    const st = Math.max(ex, ey);
+    const ex = hyp(posArr[hn]-posArr[k], posArr[hn+1]-posArr[k+1]) / refX;
+    const ey = hyp(posArr[vn]-posArr[k], posArr[vn+1]-posArr[k+1]) / refY;
+    const st = ex > ey ? ex : ey;
     alphaArr[v] = st <= 1.55 ? 1 : Math.max(0, 1 - (st-1.55)/0.85);
   }
 
   gl.viewport(0,0,W,H);
-  gl.clearColor(0,0,0,0);
   gl.clear(gl.COLOR_BUFFER_BIT);
-  gl.useProgram(glProg);
-  gl.uniform2f(gl.getUniformLocation(glProg,'uRes'), W, H);
-  gl.uniform1f(gl.getUniformLocation(glProg,'uShadeAmt'), shadeAmt);
-  gl.uniform1f(gl.getUniformLocation(glProg,'uOcc'), occ ? 1 : 0);
-  gl.uniform1f(gl.getUniformLocation(glProg,'uAlpha'), alpha);
+  gl.uniform2f(U.uRes, W, H);
+  gl.uniform1f(U.uShadeAmt, shadeAmt);
+  gl.uniform1f(U.uOcc, occ ? 1 : 0);
+  gl.uniform1f(U.uAlpha, alpha);
+  gl.uniform1f(U.uMean, shadeMean);
 
-  const bind = (name, buf, data, size, usage)=>{
-    const loc = gl.getAttribLocation(glProg, name);
-    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-    if(data) gl.bufferData(gl.ARRAY_BUFFER, data, usage);
-    gl.enableVertexAttribArray(loc);
-    gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 0, 0);
-  };
-  bind('aPos', glPos, posArr, 2, gl.DYNAMIC_DRAW);
-  bind('aA',   glA,   alphaArr, 1, gl.DYNAMIC_DRAW);
-  bind('aUV',  glUV,  null, 2);
+  // les pointeurs d'attributs sont posés une fois pour toutes dans initGL :
+  // il ne reste qu'à réécrire le contenu des deux tampons dynamiques
+  gl.bindBuffer(gl.ARRAY_BUFFER, glPos);
+  gl.bufferSubData(gl.ARRAY_BUFFER, 0, posArr);
+  gl.bindBuffer(gl.ARRAY_BUFFER, glA);
+  gl.bufferSubData(gl.ARRAY_BUFFER, 0, alphaArr);
 
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, texFor(G));
-  gl.uniform1i(gl.getUniformLocation(glProg,'uTex'), 0);
 
-  gl.activeTexture(gl.TEXTURE1);
-  gl.bindTexture(gl.TEXTURE_2D, texShade);
-  if(shadeAmt > 0.01)
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, tiny);
-  gl.uniform1i(gl.getUniformLocation(glProg,'uShade'), 1);
+  if(shadeAmt > 0.01){
+    gl.activeTexture(gl.TEXTURE1);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, tiny);
+  }
 
-  gl.activeTexture(gl.TEXTURE2);
-  gl.bindTexture(gl.TEXTURE_2D, texMask);
   if(occ && maskDirty){
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, maskCv);
+    gl.activeTexture(gl.TEXTURE2);
+    if(maskTexW !== maskCv.width || maskTexH !== maskCv.height){
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, maskCv);
+      maskTexW = maskCv.width; maskTexH = maskCv.height;
+    }else{
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, maskCv);
+    }
     maskDirty = false;
   }
-  gl.uniform1i(gl.getUniformLocation(glProg,'uMask'), 2);
 
-  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, glIdx);
   gl.drawElements(gl.TRIANGLES, idxCount, gl.UNSIGNED_SHORT, 0);
 }
 
 const MESH_OK = initGL();
 
 const mid  = (a,b)=>({x:(a.x+b.x)/2, y:(a.y+b.y)/2});
-const dist = (a,b)=>Math.hypot(a.x-b.x, a.y-b.y);
+const dist = (a,b)=>hyp(a.x-b.x, a.y-b.y);
 
 // matrice affine envoyant trois points source sur trois points destination
 function aff(s1,s2,s3, d1,d2,d3){
@@ -1355,16 +2117,6 @@ function aff(s1,s2,s3, d1,d2,d3){
 
 // dernières proportions mesurées, pour donner à l'avatar ta morphologie
 let lastRatio = 1.35;
-
-// on réduit avant de stocker : le quota du navigateur est vite atteint
-function packView(v){
-  if(!v) return null;
-  const s = Math.min(1, 512/Math.max(v.cv.width, v.cv.height));
-  const c = document.createElement('canvas');
-  c.width = Math.round(v.cv.width*s); c.height = Math.round(v.cv.height*s);
-  c.getContext('2d').drawImage(v.cv,0,0,c.width,c.height);
-  return { img:c.toDataURL('image/png'), anch:v.anch };
-}
 
 $('btn3d').onclick = ()=>{
   if(!views.face){ statusEl.textContent = 'Calibrez au moins la face'; return; }
@@ -1388,6 +2140,536 @@ $('btnShot').onclick = ()=>{
   a2.href = canvas.toDataURL('image/png');
   a2.click();
 };
+
+
+/* ===================================================================
+   FitRoom AI — couche interface.
+   Elle est posée AU-DESSUS du moteur, jamais dedans : le moteur garde
+   ses identifiants, ses réglages et sa boucle. Tout ce qui suit ne fait
+   que router des écrans, ranger des vêtements et habiller le guidage.
+   Rien ici ne s'exécute pendant une image de rendu.
+   =================================================================== */
+
+/* ---------- petites aides ---------- */
+const el = s => document.querySelector(s);
+const els = s => [...document.querySelectorAll(s)];
+const fmtDate = t => new Date(t).toLocaleDateString('fr-FR',
+  { day:'numeric', month:'short', year:'numeric' });
+
+let toastT = 0;
+const toastEl = document.createElement('div');
+toastEl.style.cssText = 'position:fixed;left:50%;bottom:calc(var(--tab-h) + 16px);'+
+  'transform:translate(-50%,14px);z-index:120;padding:11px 20px;border-radius:999px;'+
+  'background:rgba(24,21,19,.95);border:1px solid var(--line-2);font-size:13px;'+
+  'font-weight:500;opacity:0;transition:opacity .22s,transform .22s;pointer-events:none;'+
+  'max-width:82vw;text-align:center';
+document.body.appendChild(toastEl);
+function toast(msg, bad){
+  if(!msg) return;
+  toastEl.textContent = msg;
+  toastEl.style.color = bad ? 'var(--alert)' : 'var(--text)';
+  toastEl.style.opacity = '1';
+  toastEl.style.transform = 'translate(-50%,0)';
+  clearTimeout(toastT);
+  toastT = setTimeout(()=>{
+    toastEl.style.opacity = '0';
+    toastEl.style.transform = 'translate(-50%,14px)';
+  }, 2300);
+}
+uiToast = toast;   // le moteur écrit son statut ici
+
+/* ---------- base locale : dressing et looks ----------
+   localStorage plafonne vers 5 Mo et ne stocke que du texte : une photo
+   détourée en base64 y tient trois ou quatre fois. IndexedDB accepte les
+   blobs bruts, donc un vrai dressing.                                   */
+const DB = 'fitroom', GAR = 'garments', LKS = 'looks';
+let dbP = null;
+function db(){
+  if(dbP) return dbP;
+  dbP = new Promise((ok,ko)=>{
+    const r = indexedDB.open(DB, 1);
+    r.onupgradeneeded = () => {
+      const d = r.result;
+      if(!d.objectStoreNames.contains(GAR)) d.createObjectStore(GAR, { keyPath:'id' });
+      if(!d.objectStoreNames.contains(LKS)) d.createObjectStore(LKS, { keyPath:'id' });
+    };
+    r.onsuccess = () => ok(r.result);
+    r.onerror = () => ko(r.error);
+  });
+  return dbP;
+}
+async function dbAll(store){
+  const d = await db();
+  return new Promise((ok,ko)=>{
+    const q = d.transaction(store).objectStore(store).getAll();
+    q.onsuccess = ()=>ok(q.result || []); q.onerror = ()=>ko(q.error);
+  });
+}
+async function dbPut(store, val){
+  const d = await db();
+  return new Promise((ok,ko)=>{
+    const t = d.transaction(store,'readwrite');
+    t.objectStore(store).put(val);
+    t.oncomplete = ()=>ok(val); t.onerror = ()=>ko(t.error);
+  });
+}
+async function dbDel(store, id){
+  const d = await db();
+  return new Promise((ok,ko)=>{
+    const t = d.transaction(store,'readwrite');
+    t.objectStore(store).delete(id);
+    t.oncomplete = ()=>ok(); t.onerror = ()=>ko(t.error);
+  });
+}
+
+const cvToBlob = cv => new Promise(ok => cv.toBlob(ok, 'image/png'));
+function blobToCanvas(blob){
+  return new Promise((ok,ko)=>{
+    const u = URL.createObjectURL(blob);
+    const i = new Image();
+    i.onload = ()=>{
+      const c = document.createElement('canvas');
+      c.width = i.width; c.height = i.height;
+      c.getContext('2d',{ willReadFrequently:true }).drawImage(i,0,0);
+      URL.revokeObjectURL(u); ok(c);
+    };
+    i.onerror = e => { URL.revokeObjectURL(u); ko(e); };
+    i.src = u;
+  });
+}
+// une vignette légère : le dressing en affiche une douzaine d'un coup
+async function makeThumb(cv, side){
+  const s = Math.min(1, side/Math.max(cv.width, cv.height));
+  const c = document.createElement('canvas');
+  c.width = Math.max(1,Math.round(cv.width*s));
+  c.height = Math.max(1,Math.round(cv.height*s));
+  c.getContext('2d').drawImage(cv,0,0,c.width,c.height);
+  return cvToBlob(c);
+}
+
+let wardrobe = [], looks = [], currentItem = null;
+const urlCache = new Map();
+function srcOf(blob){
+  if(!blob) return '';
+  let u = urlCache.get(blob);
+  if(!u){ u = URL.createObjectURL(blob); urlCache.set(blob, u); }
+  return u;
+}
+
+/* ---------- routeur d'écrans ---------- */
+const SCREENS = ['home','cabine','dressing','looks','profil'];
+let screenNow = 'home';
+
+function go(name){
+  if(!SCREENS.includes(name)) return;
+  screenNow = name;
+  for(const s of SCREENS) el('#'+s).toggleAttribute('data-on', s === name);
+  for(const t of els('.tab')) t.setAttribute('aria-selected', String(t.dataset.go === name));
+  el('#tabbar').classList.toggle('hide', name === 'cabine');
+  // Le moteur ne calcule que si le miroir est visible : hors cabine, on
+  // ne dépense ni processeur ni batterie, tout en gardant le flux ouvert
+  // pour que le retour soit instantané.
+  liveOn = (name === 'cabine');
+  el('#stage').classList.toggle('live', liveOn && !calib && !cut);
+  if(name === 'cabine') enterCabine();
+  if(name === 'dressing') renderWardrobe();
+  if(name === 'looks') renderLooks();
+  // après la mise en page : régler avant laisse le navigateur restaurer
+  // sa position de défilement par-dessus
+  requestAnimationFrame(()=>{ el('#'+name).scrollTop = 0; });
+}
+for(const t of els('.tab')) t.onclick = ()=>go(t.dataset.go);
+el('#goCabine').onclick = ()=>go('cabine');
+el('#goDressing2').onclick = ()=>go('dressing');
+el('#cabBack').onclick = ()=>go('home');
+el('#btnLooks').onclick = ()=>go('looks');
+el('#dockAll').onclick = ()=>go('dressing');
+
+function enterCabine(){
+  if(!video && !booting){ el('#start').style.display = 'flex'; }
+  else el('#start').style.display = 'none';
+  el('#liveDot').classList.toggle('on', !!video);
+}
+
+/* ---------- feuilles ---------- */
+let sheetNow = null;
+function sheet(id){
+  if(sheetNow) sheetNow.classList.remove('on');
+  sheetNow = id ? el(id) : null;
+  el('#scrim').classList.toggle('on', !!sheetNow);
+  if(sheetNow) sheetNow.classList.add('on');
+}
+const closeSheet = ()=>sheet(null);
+el('#scrim').onclick = closeSheet;
+for(const b of els('[data-close]')) b.onclick = closeSheet;
+
+/* ---------- guidage ---------- */
+/* Trois états seulement, pour ne pas transformer le miroir en tableau de
+   bord : mal cadré, corps non vu, prêt. Le « prêt » s'efface tout seul. */
+let guideState = '', okT = 0;
+function guide(state){
+  if(state === guideState) return;
+  guideState = state;
+  const h = el('#hint');
+  clearTimeout(okT);
+  // On passe par setHint du moteur, seul écrivain du bandeau : écrire
+  // directement désynchroniserait son cache et figerait le texte.
+  if(state === 'ok'){
+    h.classList.add('ok');
+    setHint('✓ Vous êtes prêt', '1');
+    okT = setTimeout(()=>setHint(null, '0'), 1100);
+    return;
+  }
+  h.classList.remove('ok');
+  setHint(state === 'crop' ? 'Cadrez vos épaules et vos hanches'
+                           : 'Positionnez-vous face à la caméra', '1');
+}
+uiGuide = guide;
+
+/* Mode édition : pendant le détourage et la calibration, le doigt doit
+   viser un pixel précis de la photo. On repasse donc le canvas en
+   « contain » et on retire tout le HUD, qui n'aurait aucun sens ici. */
+function mode(m){
+  const editing = (m === 'edit');
+  if(editing && screenNow !== 'cabine') go('cabine');
+  el('#stage').classList.toggle('live', !editing && liveOn);
+  for(const id of ['#hudTop','#rail','#hudBottom'])
+    el(id).style.display = editing ? 'none' : '';
+  if(editing) closeSheet();
+  else guideState = '';
+}
+uiMode = mode;
+
+// la caméra est ouverte : le miroir peut prendre toute la place
+uiReady = function(){
+  el('#start').style.display = 'none';
+  el('#liveDot').classList.add('on');
+  el('#stage').classList.add('live');
+  toast('Cabine ouverte');
+};
+
+/* ---------- réglages : affichage en pourcentage + remplissage ---------- */
+function paintRange(r){
+  const p = (r.value - r.min) / (r.max - r.min) * 100;
+  r.style.setProperty('--p', p.toFixed(1) + '%');
+}
+for(const r of els('input[type=range]')){
+  paintRange(r);
+  r.addEventListener('input', ()=>paintRange(r), { passive:true });
+}
+
+const DEFAULTS = { sWidth:1.05, sLength:1.25, sOffset:0.02,
+                   sShade:0.7, sSmooth:0.45, sOpacity:1 };
+el('#adjReset').onclick = ()=>{
+  for(const [id,v] of Object.entries(DEFAULTS)){
+    const r = el('#'+id);
+    r.value = v; paintRange(r);
+    r.dispatchEvent(new Event('input'));
+  }
+  toast('Réglages réinitialisés');
+};
+
+/* ---------- rail et feuilles de la cabine ---------- */
+el('#railAdjust').onclick = ()=>sheet('#shAdjust');
+el('#railAdd').onclick    = ()=>sheet('#shAdd');
+el('#railCalib').onclick  = ()=>{ resetRing(); sheet('#shCalib'); };
+el('#btnViews').onclick   = ()=>sheet('#shViews');
+el('#adjCalib').onclick   = ()=>{ resetRing(); sheet('#shCalib'); };
+el('#adjMeasures').onclick = ()=>{ closeSheet(); go('profil'); };
+el('#profMeasure').onclick = ()=>{
+  if(!video){ toast('Ouvrez d’abord votre cabine', true); go('cabine'); return; }
+  go('cabine'); resetRing(); sheet('#shCalib');
+};
+
+/* ---------- ajout d'un vêtement ---------- */
+let pendingCat = 'haut';
+el('#addShoot').onclick   = ()=>{ closeSheet(); el('#fileShoot').click(); };
+el('#addGallery').onclick = ()=>{ closeSheet(); slot = 'face'; el('#file').click(); };
+el('#addWard').onclick    = ()=>{ closeSheet(); go('dressing'); };
+el('#addShared').onclick  = ()=>{ closeSheet(); el('#fileJson').click(); };
+el('#fileShoot').onchange = e => {
+  const f = e.target.files[0]; if(!f) return;
+  slot = 'face';
+  const dt = new DataTransfer(); dt.items.add(f);
+  el('#file').files = dt.files;
+  el('#file').dispatchEvent(new Event('change'));
+  e.target.value = '';
+};
+el('#wardAdd1').onclick = el('#wardAdd2').onclick = ()=>{ go('cabine'); sheet('#shAdd'); };
+
+/* ---------- dressing ---------- */
+let catFilter = 'tout';
+for(const c of els('.chip')) c.onclick = ()=>{
+  catFilter = c.dataset.cat;
+  for(const o of els('.chip')) o.setAttribute('aria-pressed', String(o === c));
+  renderWardrobe();
+};
+
+function renderWardrobe(){
+  const g = el('#wardGrid'), list = wardrobe.filter(
+    i => catFilter === 'tout' || i.cat === catFilter);
+  g.textContent = '';
+  el('#wardEmpty').hidden = wardrobe.length > 0;
+  el('#wardStick').hidden = wardrobe.length === 0;
+  for(const it of list){
+    const b = document.createElement('button');
+    b.className = 'cell contain';
+    b.innerHTML = `<img alt="" loading="lazy" src="${srcOf(it.thumb)}">
+      <span class="fav" aria-pressed="${!!it.fav}">
+      <svg viewBox="0 0 24 24"><path d="M12 20s-7.2-4.5-7.2-9.4A4.1 4.1 0 0 1 12 8.1a4.1 4.1 0 0 1 7.2 2.5C19.2 15.5 12 20 12 20Z"/></svg></span>
+      <span class="cap">${it.name}</span>`;
+    b.onclick = ev => {
+      if(ev.target.closest('.fav')){ toggleFav(it); return; }
+      openItem(it);
+    };
+    g.appendChild(b);
+  }
+}
+async function toggleFav(it){
+  it.fav = !it.fav;
+  await dbPut(GAR, it);
+  renderWardrobe();
+  toast(it.fav ? 'Ajouté aux favoris' : 'Retiré des favoris');
+}
+
+function openItem(it){
+  currentItem = it;
+  el('#itemName').textContent = it.name;
+  el('#itemImg').src = srcOf(it.thumb);
+  el('#itemCat').textContent = it.cat === 'veste' ? 'Veste' : 'Haut';
+  el('#itemDate').textContent = fmtDate(it.created);
+  const vs = Object.keys(it.views || {});
+  el('#itemViews').textContent = vs.length ? vs.join(' · ') : '—';
+  const w = el('#itemWarn');
+  if(vs.length < 2){
+    w.hidden = false;
+    w.innerHTML = '<b>Une seule vue calibrée.</b> Le vêtement restera juste de face ; '+
+      'ajoutez une photo de profil et de dos pour qu’il suive vos rotations.';
+  } else w.hidden = true;
+  sheet('#shItem');
+}
+el('#itemFav').onclick = ()=>{ if(currentItem) toggleFav(currentItem); };
+el('#itemDel').onclick = async ()=>{
+  if(!currentItem || !confirm('Supprimer « '+currentItem.name+' » du dressing ?')) return;
+  await dbDel(GAR, currentItem.id);
+  wardrobe = wardrobe.filter(x => x.id !== currentItem.id);
+  currentItem = null; closeSheet(); renderWardrobe();
+  toast('Vêtement supprimé');
+};
+el('#itemWear').onclick = ()=>{ if(currentItem) wearItem(currentItem); };
+
+/* Charge un vêtement du dressing dans le moteur : on reconstitue exactement
+   la structure qu'il attend, { cv, anch, mirror }, vue par vue. */
+async function wearItem(it){
+  toast('Préparation du vêtement…');
+  try{
+    for(const k of ['face','profil','dos']){
+      dropView(views[k]);
+      views[k] = null;
+    }
+    for(const k of ['face','profil','dos']){
+      const v = it.views && it.views[k];
+      if(!v) continue;
+      views[k] = { cv: await blobToCanvas(v.img), anch: v.anch, mirror:null };
+    }
+    if(!views.face){ toast('Ce vêtement n’a pas de vue de face', true); return; }
+    currentItem = it;
+    refreshSlots('face');
+    saveViews();
+    closeSheet();
+    go('cabine');
+    el('#cabFav').setAttribute('aria-pressed', String(!!it.fav));
+    el('#cabFav').classList.toggle('on', !!it.fav);
+    toast('Essayage LIVE · ' + it.name);
+  }catch(e){ toast('Vêtement illisible', true); }
+}
+
+/* Appelé par le moteur quand une calibration vient d'aboutir. */
+async function onGarmentCalibrated(){
+  try{
+    const out = {};
+    for(const k of ['face','profil','dos']){
+      if(!views[k]) continue;
+      const p = packView(views[k]);
+      const r = await fetch(p.img);
+      out[k] = { img: await r.blob(), anch: p.anch };
+    }
+    if(!out.face) return;
+    const thumb = await makeThumb(views.face.cv, 220);
+    if(currentItem && wardrobe.some(x => x.id === currentItem.id)){
+      currentItem.views = out; currentItem.thumb = thumb;
+      await dbPut(GAR, currentItem);
+    }else{
+      const n = wardrobe.length + 1;
+      currentItem = { id:'g'+Date.now(), name:'Vêtement '+n, cat:pendingCat,
+                      created:Date.now(), fav:false, thumb, views:out };
+      wardrobe.push(currentItem);
+      await dbPut(GAR, currentItem);
+    }
+    syncDock();
+    toast('Vêtement prêt · essayage LIVE');
+  }catch(e){ toast('Enregistrement impossible', true); }
+}
+uiCalibrated = onGarmentCalibrated;
+
+/* ---------- dock de la cabine ---------- */
+function syncDock(){
+  const d = el('#dockList');
+  if(!d) return;
+  d.textContent = '';
+  for(const it of wardrobe){
+    const b = document.createElement('button');
+    b.className = 'thumb';
+    b.setAttribute('aria-pressed', String(!!currentItem && it.id === currentItem.id));
+    b.innerHTML = `<img alt="${it.name}" loading="lazy" src="${srcOf(it.thumb)}">`;
+    b.onclick = ()=>wearItem(it);
+    d.appendChild(b);
+  }
+  const add = document.createElement('button');
+  add.className = 'thumb add';
+  add.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 5.5v13M5.5 12h13"/></svg>';
+  add.onclick = ()=>sheet('#shAdd');
+  d.appendChild(add);
+}
+uiSyncDock = syncDock;
+
+el('#cabFav').onclick = ()=>{
+  if(!currentItem){ toast('Chargez un vêtement d’abord'); return; }
+  toggleFav(currentItem);
+  el('#cabFav').setAttribute('aria-pressed', String(!!currentItem.fav));
+  el('#cabFav').classList.toggle('on', !!currentItem.fav);
+};
+
+/* ---------- calibration guidée ---------- */
+const RING = 377;
+function resetRing(){
+  el('#ring').hidden = true;
+  el('#calibState').hidden = true;
+  el('#calibH').textContent = 'Tenez-vous face à la caméra';
+  el('#btnMeasure').disabled = false;
+  el('#btnMeasure').textContent = 'Calibrer mon corps';
+  el('.fg') && el('.fg').setAttribute('stroke-dashoffset', RING);
+  el('#ringN').textContent = '0 %';
+}
+function calibTick(p){
+  const r = el('#ring');
+  if(r.hidden){
+    r.hidden = false;
+    el('#calibState').hidden = false;
+    el('#calibH').textContent = 'Restez immobile';
+    el('#btnMeasure').disabled = true;
+    el('#btnMeasure').textContent = 'Mesure en cours…';
+  }
+  el('.fg').setAttribute('stroke-dashoffset', (RING * (1-p)).toFixed(1));
+  el('#ringN').textContent = Math.round(p*100) + ' %';
+}
+uiCalibTick = calibTick;
+
+function onMeasured(sure){
+  el('#calibH').textContent = '✓ Cabine calibrée';
+  el('#calibState').textContent = sure
+    ? 'Mesure d’après votre stature.'
+    : 'Chevilles hors cadre : estimation moins fiable.';
+  el('#btnMeasure').disabled = false;
+  el('#btnMeasure').textContent = 'Recommencer la mesure';
+  el('.fg').setAttribute('stroke-dashoffset', 0);
+  el('#ringN').textContent = '100 %';
+  for(const [a,b] of [['mScale','mScale2'],['mShCm','mShCm2'],
+                      ['mChest','mChest2'],['mSize','mSize2']])
+    el('#'+b).textContent = el('#'+a).textContent;
+}
+uiMeasured = onMeasured;
+
+/* ---------- capture ---------- */
+let shotBlob = null, shotItem = null;
+el('#shutter').onclick = async ()=>{
+  if(!video){ toast('Ouvrez d’abord votre cabine', true); return; }
+  const blob = await cvToBlob(canvas);
+  if(!blob){ toast('Capture impossible', true); return; }
+  shotBlob = blob;
+  shotItem = { id:'l'+Date.now(), created:Date.now(), fav:false, blob };
+  el('#shotImg').src = srcOf(blob);
+  el('#shotFav').setAttribute('aria-pressed','false');
+  sheet('#shShot');
+  await dbPut(LKS, shotItem);
+  looks.unshift(shotItem);
+};
+el('#shotBack').onclick = closeSheet;
+el('#shotFav').onclick = async ()=>{
+  if(!shotItem) return;
+  shotItem.fav = !shotItem.fav;
+  await dbPut(LKS, shotItem);
+  toast(shotItem.fav ? 'Ajouté aux favoris' : 'Retiré des favoris');
+};
+el('#shotSave').onclick = ()=>{ el('#btnShot').click(); toast('Image enregistrée'); };
+el('#shotShare').onclick = ()=>shareBlob(shotBlob);
+
+async function shareBlob(blob){
+  if(!blob) return;
+  const f = new File([blob], 'fitroom-'+Date.now()+'.png', { type:'image/png' });
+  try{
+    if(navigator.canShare && navigator.canShare({ files:[f] }))
+      await navigator.share({ files:[f], title:'Mon look FitRoom AI' });
+    else { el('#btnShot').click(); toast('Image enregistrée'); }
+  }catch(e){ /* partage annulé */ }
+}
+
+/* ---------- looks ---------- */
+let lookNow = null;
+function renderLooks(){
+  const g = el('#looksGrid');
+  g.textContent = '';
+  el('#looksEmpty').hidden = looks.length > 0;
+  for(const lk of looks){
+    const b = document.createElement('button');
+    b.className = 'cell';
+    b.innerHTML = `<img alt="" loading="lazy" src="${srcOf(lk.blob)}">
+      <span class="fav" aria-pressed="${!!lk.fav}">
+      <svg viewBox="0 0 24 24"><path d="M12 20s-7.2-4.5-7.2-9.4A4.1 4.1 0 0 1 12 8.1a4.1 4.1 0 0 1 7.2 2.5C19.2 15.5 12 20 12 20Z"/></svg></span>
+      <span class="cap">${fmtDate(lk.created)}</span>`;
+    b.onclick = async ev => {
+      if(ev.target.closest('.fav')){
+        lk.fav = !lk.fav; await dbPut(LKS, lk); renderLooks(); return;
+      }
+      lookNow = lk;
+      el('#lookImg').src = srcOf(lk.blob);
+      sheet('#shLook');
+    };
+    g.appendChild(b);
+  }
+}
+el('#lookFav').onclick = async ()=>{
+  if(!lookNow) return;
+  lookNow.fav = !lookNow.fav; await dbPut(LKS, lookNow);
+  toast(lookNow.fav ? 'Ajouté aux favoris' : 'Retiré des favoris'); renderLooks();
+};
+el('#lookShare').onclick = ()=>lookNow && shareBlob(lookNow.blob);
+el('#lookRetry').onclick = ()=>{ closeSheet(); go('cabine'); };
+el('#lookDel').onclick = async ()=>{
+  if(!lookNow || !confirm('Supprimer ce look ?')) return;
+  await dbDel(LKS, lookNow.id);
+  looks = looks.filter(x => x.id !== lookNow.id);
+  lookNow = null; closeSheet(); renderLooks(); toast('Look supprimé');
+};
+
+/* ---------- profil ---------- */
+el('#pShare').onclick  = ()=>el('#btnShare').click();
+el('#pExport').onclick = ()=>el('#btnExport').click();
+el('#pImport').onclick = ()=>el('#btnImport').click();
+el('#p3d').onclick     = ()=>el('#btn3d').click();
+
+/* ---------- démarrage ---------- */
+(async function initUI(){
+  try{
+    wardrobe = (await dbAll(GAR)).sort((a,b)=>b.created-a.created);
+    looks    = (await dbAll(LKS)).sort((a,b)=>b.created-a.created);
+  }catch(e){ toast('Stockage local indisponible', true); }
+  syncDock();
+  renderWardrobe();
+  renderLooks();
+  go('home');
+})();
+
 </script>
 </body>
 </html>

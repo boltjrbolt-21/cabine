@@ -4,6 +4,13 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Cabine — essayage virtuel</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#14110F">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Cabine">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,400&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500&display=swap" rel="stylesheet">
@@ -31,14 +38,16 @@
   #stage{position:relative;display:flex;align-items:center;justify-content:center;
          background:radial-gradient(120% 90% at 50% 0%, #201B17 0%, #100E0C 70%);
          overflow:hidden;min-height:0}
-  #out{max-width:100%;max-height:100%;display:block}
+  /* touch-action:none — sans lui, chaque toucher de calibration fait aussi
+     défiler ou zoomer la page sur mobile, et le point se pose à côté. */
+  #out{max-width:100%;max-height:100%;display:block;touch-action:none}
   #stage::after{content:"";position:absolute;inset:8px;
                 border:1px solid rgba(200,164,92,.16);pointer-events:none}
   #hint{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);
         font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;
         text-transform:uppercase;color:var(--muted);background:rgba(16,14,12,.85);
         padding:7px 12px;border:1px solid var(--line);text-align:center;max-width:88%;
-        transition:opacity .4s}
+        transition:opacity .4s;pointer-events:none}
   #start{position:absolute;inset:0;z-index:3;display:flex;flex-direction:column;
          align-items:center;justify-content:center;gap:16px;text-align:center;padding:24px;
          background:rgba(16,14,12,.94)}
@@ -85,6 +94,12 @@
     border:none;border-radius:50%;cursor:pointer}
   input[type=range]:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 3px rgba(200,164,92,.35)}
 
+  .seg{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}
+  .seg button{padding:9px;background:transparent;color:var(--paper);border:1px solid var(--line);
+    cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:10px;
+    letter-spacing:.1em;text-transform:uppercase}
+  .seg button[aria-pressed=true]{border-color:var(--brass);color:var(--brass)}
+
   .swatches{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
   .sw{width:30px;height:30px;border:1px solid var(--line);cursor:pointer;padding:0}
   .sw[aria-pressed=true]{outline:2px solid var(--brass);outline-offset:2px}
@@ -116,7 +131,7 @@
 
 <header>
   <h1>Cabine</h1>
-  <div class="sub">essayage virtuel · v17</div>
+  <div class="sub">essayage virtuel · v22</div>
   <div class="status" id="status">En attente</div>
 </header>
 
@@ -196,6 +211,36 @@
     <button class="act primary" id="btnShot">Enregistrer l'image</button>
     <button class="act" id="btn3d">Créer l'avatar 3D</button>
 
+    <h2>Taille conseillée</h2>
+    <div class="field">
+      <label for="hCm">Votre taille <span id="vHCm">175 cm</span></label>
+      <input type="range" id="hCm" min="140" max="210" step="1" value="175">
+    </div>
+    <div class="seg" id="morpho">
+      <button data-m="h" aria-pressed="true">Homme</button>
+      <button data-m="f" aria-pressed="false">Femme</button>
+    </div>
+    <button class="act" id="btnMeasure">Mesurer pendant 3 s</button>
+    <div class="measures" style="margin-top:4px">
+      <div class="row"><span class="k">Échelle</span><span class="v" id="mScale">—</span></div>
+      <div class="row"><span class="k">Carrure</span><span class="v" id="mShCm">—</span></div>
+      <div class="row"><span class="k">Tour de poitrine</span><span class="v" id="mChest">—</span></div>
+      <div class="row"><span class="k">Taille conseillée</span><span class="v" id="mSize">—</span></div>
+    </div>
+    <p class="note" style="margin-top:10px" id="sizeNote">Placez-vous de face, en pied,
+    chevilles visibles. Sans les chevilles, l'échelle est déduite de proportions moyennes
+    et le résultat perd en fiabilité.</p>
+
+    <h2>Partage</h2>
+    <button class="act" id="btnShare">Partager la cabine</button>
+    <button class="act" id="btnExport">Exporter le vêtement</button>
+    <button class="act" id="btnImport">Importer un vêtement</button>
+    <p class="note" style="margin-top:10px" id="installNote">Pour l'installer en app :
+    bouton Partager de Safari, puis <b>Sur l'écran d'accueil</b>.</p>
+    <input type="file" id="fileJson" accept="application/json,.json" />
+    <p class="note" style="margin-top:10px">Le fichier exporté contient les photos détourées
+    et leurs points de calibration. Qui le reçoit l'importe et essaie le vêtement sans rien refaire.</p>
+
     <p class="note">
       Le vêtement est ancré sur ses propres coutures d'épaules, étiré sur votre buste,
       déformé sur trois points, éclairé par la lumière de la pièce, et masqué là où
@@ -209,8 +254,27 @@
 import { PoseLandmarker, ImageSegmenter, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
 
 const $ = id => document.getElementById(id);
-const canvas = $('out'), ctx = canvas.getContext('2d');
+const canvas = $('out'), ctx = canvas.getContext('2d', { alpha:false });
 const layer = document.createElement('canvas'), lctx = layer.getContext('2d');
+
+// Math.hypot gère les débordements d'exposant, ce qui le rend environ dix fois
+// plus lent qu'une racine. Sur les milliers d'appels par image de la grille de
+// déformation, la différence est mesurable.
+const hyp = (x,y)=>Math.sqrt(x*x + y*y);
+
+// Déclarés ici, et pas dans la section graphique plus bas : dropView() peut
+// être appelé par l'import d'un fichier de vêtement avant que cette section
+// ne soit évaluée, et une variable let n'existe pas avant sa ligne.
+let gl = null;
+const texCache = new WeakMap();
+
+// Éléments lus à chaque image : on résout les identifiants une bonne fois.
+// getElementById dans la boucle, c'était une quinzaine de recherches par image.
+const elGarment = $('cGarment'), elSleeves = $('cSleeves'),
+      elOcclusion = $('cOcclusion'), elSkeleton = $('cSkeleton');
+const elShoulder = $('mShoulder'), elTorso = $('mTorso'), elAngle = $('mAngle'),
+      elView = $('mView'), elSleeve = $('mSleeve'), elFps = $('mFps');
+
 // Safari annonce ctx.filter mais ne l'applique pas toujours au rendu.
 // On fabrique donc l'éclairage à la main : la vidéo réduite à 48×27 puis
 // réétirée donne un flou gratuit, et la désaturation efface les motifs.
@@ -218,14 +282,30 @@ const tiny = document.createElement('canvas');
 tiny.width = 48; tiny.height = 27;
 const tctx = tiny.getContext('2d', { willReadFrequently:true });
 
-function buildShading(){
+// La luminance moyenne de la pièce ne change pas à 60 Hz. On la relit
+// rarement, et le décalage autour d'elle se fait dans le nuanceur : la
+// version d'origine faisait un getImageData par image, ce qui force le
+// processeur à attendre la carte graphique à chaque tour de boucle.
+let shadeMean = 0.5, meanTick = 0;
+const MEAN_EVERY = 12;
+
+function drawTiny(){
   tctx.save(); tctx.translate(tiny.width,0); tctx.scale(-1,1);
   tctx.drawImage(video,0,0,tiny.width,tiny.height); tctx.restore();
-  const d = tctx.getImageData(0,0,tiny.width,tiny.height), p = d.data;
-  const n = p.length/4;
+}
+
+function updateMean(){
+  const p = tctx.getImageData(0,0,tiny.width,tiny.height).data;
   let sum = 0;
   for(let i=0;i<p.length;i+=4) sum += 0.299*p[i] + 0.587*p[i+1] + 0.114*p[i+2];
-  const mean = sum/n;
+  shadeMean = sum/(p.length/4)/255;
+}
+
+// Chemin sans carte graphique : la nuance doit être cuite dans le bitmap,
+// puisqu'il n'y a pas de nuanceur pour la calculer au vol.
+function bakeShading(){
+  const d = tctx.getImageData(0,0,tiny.width,tiny.height), p = d.data;
+  const mean = shadeMean*255;
   // gris moyen = tissu inchangé ; plus clair = éclairé, plus sombre = ombré
   for(let i=0;i<p.length;i+=4){
     const l = 0.299*p[i] + 0.587*p[i+1] + 0.114*p[i+2];
@@ -241,6 +321,14 @@ lctx.globalCompositeOperation = 'soft-light';
 const BLEND = lctx.globalCompositeOperation === 'soft-light' ? 'soft-light' : 'multiply';
 lctx.globalCompositeOperation = 'source-over';
 const statusEl = $('status'), hint = $('hint');
+
+// Le bandeau d'aide était réécrit à chaque image, presque toujours avec le
+// même texte. On ne touche au document que lorsque quelque chose change.
+let hintTxt = null, hintOp = null;
+function setHint(t, op){
+  if(t != null && t !== hintTxt){ hint.textContent = t; hintTxt = t; }
+  if(op != null && op !== hintOp){ hint.style.opacity = op; hintOp = op; }
+}
 
 /* ---------------------------------------------------------------
    Points d'ancrage du vêtement, en fractions de son image.
@@ -272,7 +360,9 @@ function mirrorView(v){
   c.width = v.cv.width; c.height = v.cv.height;
   const g = c.getContext('2d');
   g.translate(c.width,0); g.scale(-1,1); g.drawImage(v.cv,0,0);
-  v.mirror = { cv:c, anch:{ x1:1-v.anch.x2, x2:1-v.anch.x1, sy:v.anch.sy, hy:v.anch.hy } };
+  const a = v.anch;
+  v.mirror = { cv:c, anch:{ x1:1-a.x2, x2:1-a.x1, sy:a.sy, hy:a.hy,
+    arm: a.arm ? { x:1-a.arm.x, y:a.arm.y, hw:a.arm.hw } : null } };
   return v.mirror;
 }
 
@@ -329,15 +419,21 @@ COLORS.forEach((col,i)=>{
   b.setAttribute('aria-pressed', i===0?'true':'false');
   b.setAttribute('aria-label','Couleur '+col);
   b.onclick = ()=>{
-    views.face = { cv:makeTee(col), anch:{ ...A_DEF } };
-    views.profil = views.dos = null;
+    // Une pastille ne remplace que le t-shirt dessiné. Écraser une photo
+    // calibrée d'un simple effleurement, et emporter le profil et le dos
+    // avec elle, faisait perdre tout le travail de calibration.
+    if(views.face && !views.face.gen &&
+       !confirm('Remplacer la photo calibrée de face par le t-shirt uni ?')) return;
+    dropView(views.face);
+    views.face = { cv:makeTee(col), anch:{ ...A_DEF }, gen:true };
     refreshSlots('face');
+    saveViews();
     [...swWrap.children].forEach(x=>x.setAttribute('aria-pressed','false'));
     b.setAttribute('aria-pressed','true');
   };
   swWrap.appendChild(b);
 });
-views.face = { cv:makeTee(COLORS[0]), anch:{ ...A_DEF } };
+views.face = { cv:makeTee(COLORS[0]), anch:{ ...A_DEF }, gen:true };
 refreshSlots('face');
 
 for(const b of document.querySelectorAll('.vw')){
@@ -352,8 +448,9 @@ const loadImage = src => new Promise((ok,ko)=>{
 $('file').onchange = async e => {
   const f = e.target.files[0]; if(!f) return;
   statusEl.textContent = 'Ouverture…';
+  const url = URL.createObjectURL(f);
   try{
-    const img = await loadImage(URL.createObjectURL(f));
+    const img = await loadImage(url);
     const max = 700;
     const s = Math.min(1, max/Math.max(img.width,img.height));
     const c = document.createElement('canvas');
@@ -364,6 +461,8 @@ $('file').onchange = async e => {
   }catch(err){
     statusEl.textContent = 'Photo illisible';
     statusEl.style.color = 'var(--alert)';
+  }finally{
+    URL.revokeObjectURL(url);
   }
   e.target.value = '';
 };
@@ -393,8 +492,7 @@ function drawCut(){
     ctx.fillRect(x,y,s,s);
   }
   ctx.drawImage(cut.work,0,0);
-  hint.textContent = 'Touchez le fond à effacer, puis Valider';
-  hint.style.opacity = '0';
+  setHint('Touchez le fond à effacer, puis Valider', '0');
 }
 
 async function autoCut(){
@@ -515,8 +613,7 @@ function drawCalib(){
       ctx.stroke();
     }
   });
-  hint.textContent = STEPS[calib.pts.length];
-  hint.style.opacity = '1';
+  setHint(STEPS[calib.pts.length], '1');
 }
 
 // demi-largeur de la manche, mesurée sur la transparence de la photo
@@ -563,7 +660,7 @@ canvas.addEventListener('pointerdown', ev => {
   const l = a.x <= b.x ? a : b, rr = a.x <= b.x ? b : a;
   if(rr.x - l.x < 0.10){                 // deux touchers trop rapprochés
     calib.pts = [];
-    hint.textContent = 'Épaules trop rapprochées, reprenons';
+    setHint('Épaules trop rapprochées, reprenons', '1');
     drawCalib(); return;
   }
   const anch = {
@@ -571,13 +668,191 @@ canvas.addEventListener('pointerdown', ev => {
     hy:Math.max(c3.y,(a.y+b.y)/2+0.05),
     arm:{ x:c4.x, y:c4.y, hw:sleeveHalfWidth(calib.cv, l, c4) }
   };
+  dropView(views[slot]);
   views[slot] = { cv:calib.cv, anch, mirror:null };
   calib = null;
   refreshSlots(slot);
+  saveViews();
   $('btnRecal').style.display = 'block';
-  hint.textContent = 'Reculez pour cadrer épaules et hanches';
+  setHint('Reculez pour cadrer épaules et hanches', null);
   if(video){ canvas.width = video.videoWidth; canvas.height = video.videoHeight; }
 });
+
+/* ---------------------------------------------------------------
+   Persistance : les vues calibrées survivent au rechargement, et
+   s'exportent en un fichier que l'on peut transmettre.
+   --------------------------------------------------------------- */
+const STORE = 'cabine.views';
+
+// on réduit avant de stocker : le quota du navigateur est vite atteint
+function packView(v){
+  if(!v) return null;
+  const s = Math.min(1, 512/Math.max(v.cv.width, v.cv.height));
+  const c = document.createElement('canvas');
+  c.width = Math.round(v.cv.width*s); c.height = Math.round(v.cv.height*s);
+  c.getContext('2d').drawImage(v.cv, 0, 0, c.width, c.height);
+  return { img:c.toDataURL('image/png'), anch:v.anch };
+}
+
+function serialiseViews(){
+  const out = {};
+  for(const k of ['face','profil','dos'])
+    if(views[k]) out[k] = packView(views[k]);
+  return out;
+}
+
+function saveViews(){
+  try{ localStorage.setItem(STORE, JSON.stringify(serialiseViews())); }
+  catch(e){ /* quota atteint : on continue sans sauvegarde */ }
+}
+
+/* Un fichier de vêtement vient de n'importe qui. Sans contrôle, le champ
+   « img » accepterait une adresse http distante — un pixel espion déclenché
+   à l'import — et des ancrages non numériques suffiraient à figer le rendu
+   sur des NaN. On n'accepte donc qu'une image embarquée et des fractions. */
+const num = (v, lo, hi, def) =>
+  (typeof v === 'number' && isFinite(v) && v >= lo && v <= hi) ? v : def;
+
+function cleanAnch(a){
+  if(!a || typeof a !== 'object') return null;
+  const x1 = num(a.x1, 0, 1, null), x2 = num(a.x2, 0, 1, null);
+  if(x1 === null || x2 === null || x2 - x1 < 0.05) return null;
+  const sy = num(a.sy, 0, 1, 0.145);
+  const out = { x1, x2, sy, hy: num(a.hy, 0, 1, Math.min(1, sy + 0.5)) };
+  if(a.arm && typeof a.arm === 'object'){
+    const ax = num(a.arm.x, -0.5, 1.5, null), ay = num(a.arm.y, 0, 1, null);
+    if(ax !== null && ay !== null)
+      out.arm = { x:ax, y:ay, hw: num(a.arm.hw, 0.001, 0.5, 0.045) };
+  }
+  return out;
+}
+
+async function loadViews(obj){
+  let n = 0;
+  for(const k of ['face','profil','dos']){
+    if(!obj || !obj[k]) continue;
+    const src = obj[k].img, anch = cleanAnch(obj[k].anch);
+    if(typeof src !== 'string' || !src.startsWith('data:image/') || !anch) continue;
+    try{
+      const img = await loadImage(src);
+      const c = document.createElement('canvas');
+      c.width = img.width; c.height = img.height;
+      c.getContext('2d', { willReadFrequently:true }).drawImage(img,0,0);
+      dropView(views[k]);
+      views[k] = { cv:c, anch, mirror:null };
+      n++;
+    }catch(e){ /* vue illisible : on passe */ }
+  }
+  if(n){ refreshSlots('face'); $('btnRecal').style.display = 'block'; }
+  return n;
+}
+
+if('serviceWorker' in navigator){
+  addEventListener('load', ()=> navigator.serviceWorker.register('sw.js').catch(()=>{}));
+}
+
+$('btnShare').onclick = async ()=>{
+  const url = location.href.split('?')[0];
+  try{
+    if(navigator.share) await navigator.share({ title:'Cabine — essayage virtuel', url });
+    else { await navigator.clipboard.writeText(url); statusEl.textContent = 'Lien copié'; }
+  }catch(e){ /* partage annulé */ }
+};
+
+$('btnExport').onclick = ()=>{
+  if(!views.face){ statusEl.textContent = 'Calibrez d\u2019abord une vue'; return; }
+  const blob = new Blob([JSON.stringify(serialiseViews())], { type:'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'vetement-' + Date.now() + '.json';
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+};
+
+$('btnImport').onclick = ()=> $('fileJson').click();
+$('fileJson').onchange = async e => {
+  const f = e.target.files[0]; if(!f) return;
+  try{
+    const n = await loadViews(JSON.parse(await f.text()));
+    statusEl.textContent = n ? n + ' vue(s) importée(s)' : 'Fichier vide';
+    if(n) saveViews();
+  }catch(err){
+    statusEl.textContent = 'Fichier illisible';
+    statusEl.style.color = 'var(--alert)';
+  }
+  e.target.value = '';
+};
+
+try{
+  const saved = localStorage.getItem(STORE);
+  if(saved) loadViews(JSON.parse(saved));
+}catch(e){ /* rien de sauvegardé */ }
+
+/* ---------------------------------------------------------------
+   Mesure et taille conseillée. Les repères donnent des pixels ; la
+   taille saisie fournit l'échelle. Sans les chevilles, on retombe
+   sur un rapport carrure/stature moyen, nettement moins fiable.
+   --------------------------------------------------------------- */
+let morpho = 'h';
+let measuring = null;          // { t0, samples:[] }
+
+for(const b of document.querySelectorAll('#morpho button')){
+  b.onclick = ()=>{
+    morpho = b.dataset.m;
+    for(const o of document.querySelectorAll('#morpho button'))
+      o.setAttribute('aria-pressed', o === b ? 'true' : 'false');
+  };
+}
+$('hCm').oninput = ()=> $('vHCm').textContent = $('hCm').value + ' cm';
+
+$('btnMeasure').onclick = ()=>{
+  if(!video){ statusEl.textContent = 'Ouvrez la caméra d\u2019abord'; return; }
+  measuring = { t0: performance.now(), samples: [] };
+  setHint('Mesure en cours, tenez-vous droit', '1');
+};
+
+// barèmes usuels, en tour de poitrine (cm)
+const CHART = {
+  h: [['XS',0,88],['S',88,94],['M',94,100],['L',100,108],['XL',108,116],['XXL',116,999]],
+  f: [['XS',0,82],['S',82,86],['M',86,92],['L',92,98],['XL',98,106],['XXL',106,999]]
+};
+const FR = { h:{XS:42,S:44,M:48,L:50,XL:54,XXL:58}, f:{XS:34,S:36,M:38,L:40,XL:44,XXL:48} };
+
+const median = a => { const b=[...a].sort((x,y)=>x-y); return b[b.length>>1]; };
+
+function finishMeasure(){
+  const S = measuring.samples;
+  measuring = null;
+  setHint('Reculez pour cadrer épaules et hanches', null);
+  if(S.length < 8){ statusEl.textContent = 'Mesure trop courte'; return; }
+
+  const H = +$('hCm').value;
+  const full = S.filter(s => s.stature > 0);
+  let scale, sure;
+  if(full.length > S.length*0.5){
+    scale = H / median(full.map(s => s.stature));       // cm par pixel
+    sure = true;
+  }else{
+    // rapport carrure sur stature moyen chez l'adulte
+    const k = morpho === 'h' ? 0.245 : 0.230;
+    scale = (k*H) / median(S.map(s => s.sh));
+    sure = false;
+  }
+
+  const shCm = median(S.map(s => s.sh)) * scale;
+  // le tour de poitrine se régresse sur la largeur biacromiale
+  const chest = shCm * 2.15 + (morpho === 'h' ? 2 : 4);
+
+  const row = CHART[morpho].find(r => chest >= r[1] && chest < r[2]) || CHART[morpho][2];
+  $('mScale').textContent = sure ? 'chevilles vues' : 'estimée';
+  $('mShCm').textContent  = shCm.toFixed(1) + ' cm';
+  $('mChest').textContent = Math.round(chest-4) + '–' + Math.round(chest+4) + ' cm';
+  $('mSize').textContent  = row[0] + ' · ' + FR[morpho][row[0]];
+  $('sizeNote').innerHTML = sure
+    ? 'Mesure d\u2019après votre stature. <b>Comptez une taille d\u2019écart possible</b> selon la coupe du vêtement.'
+    : 'Chevilles hors cadre : échelle déduite de proportions moyennes. <b>Refaites-la en pied</b> pour un résultat fiable.';
+  statusEl.textContent = 'En direct';
+}
 
 const cfg = { width:1.05, length:1.25, offset:0.02, shade:0.7, smooth:0.45, opacity:1 };
 const bind = (id,key,fmt)=>{
@@ -595,16 +870,34 @@ bind('sOpacity','opacity',v=>Math.round(v*100)+' %');
 const MODEL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
 const SEG   = "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_multiclass_256x256/float32/latest/selfie_multiclass_256x256.tflite";
 const WASM  = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
-let landmarker, segmenter = null, video, lastT = -1, smoothed = null;
+let landmarker, segmenter = null, video, lastT = -1;
 let fpsT = performance.now(), fpsN = 0;
 let yaw = null, band = 'face';
 // écart angulaire le plus court, pour lisser sans sauter à ±180°
 const angDiff = (a,b)=>{ let d=(a-b)%360; if(d>180)d-=360; if(d<-180)d+=360; return d; };
 
-// masque de peau, reconstruit à chaque image
+/* Les points lissés vivaient dans un tableau reconstruit deux fois par image :
+   soixante-six objets jetés à chaque tour, que le ramasse-miettes finissait
+   par venir réclamer en plein rendu. On garde le même tableau et on écrit
+   dedans. */
+let P = null, poseInit = false;
+function ensurePose(n){
+  if(P && P.length === n) return;
+  P = new Array(n);
+  for(let i=0;i<n;i++) P[i] = { x:0, y:0, v:0 };
+  poseInit = false;
+}
+
+// masque de peau, reconstruit une image sur segEvery
 const maskCv = document.createElement('canvas');
 const mctx = maskCv.getContext('2d');
-let maskImg = null, maskReady = false, segFrame = 0;
+let maskImg = null, mask32 = null, maskReady = false, maskDirty = false, segFrame = 0;
+
+/* Cadence de segmentation adaptative. La peau ne se déplace pas d'une image
+   à l'autre, alors qu'un passage du réseau coûte plusieurs millisecondes :
+   quand la machine peine, on l'espace au lieu de laisser tomber des images. */
+let segEvery = 2, cost = 16, tune = 0;
+const readout = { tick:0 };
 
 $('btnStart').onclick = boot;
 
@@ -616,8 +909,12 @@ async function boot(){
     statusEl.style.color='var(--brass)';
 
     statusEl.textContent = 'Accès caméra…';
+    // Plafonner à 30 images/seconde : le réseau de pose tourne une fois par
+    // image de la caméra, et sur une webcam 60 Hz c'était deux fois le travail
+    // nécessaire pour un vêtement qui, lui, ne bouge pas plus vite.
     const stream = await navigator.mediaDevices.getUserMedia({
-      video:{ width:{ideal:960}, height:{ideal:540}, facingMode:'user' }, audio:false });
+      video:{ width:{ideal:960}, height:{ideal:540}, facingMode:'user',
+              frameRate:{ ideal:30, max:30 } }, audio:false });
     video = $('cam'); video.srcObject = stream; await video.play();
     if(!video.videoWidth) await new Promise(r => video.onloadedmetadata = r);
 
@@ -665,21 +962,42 @@ const SK = [[11,12],[11,23],[12,24],[23,24],[11,13],[13,15],[12,14],[14,16],[23,
 function loop(){
   requestAnimationFrame(loop);
   if(calib || cut) return;
+  // onglet en arrière-plan : la caméra tourne encore, pas la peine d'inférer
+  if(document.hidden) return;
   if(video.currentTime === lastT) return;
   lastT = video.currentTime;
+
+  const t0 = performance.now();
+
+  // la mesure s'arrête au bout de trois secondes même si la pose est perdue :
+  // dans la version précédente, sortir du cadre la laissait tourner sans fin
+  if(measuring && t0 - measuring.t0 > 3000) finishMeasure();
 
   const W = canvas.width, H = canvas.height;
   ctx.save(); ctx.translate(W,0); ctx.scale(-1,1); ctx.drawImage(video,0,0,W,H); ctx.restore();
 
-  const res = landmarker.detectForVideo(video, performance.now());
+  const res = landmarker.detectForVideo(video, t0);
   const lm = res.landmarks?.[0];
+  const show = ++readout.tick % 5 === 0;   // les compteurs à 6 Hz suffisent
 
   if(lm){
-    const raw = lm.map(p=>({ x:(1-p.x)*W, y:p.y*H, v:p.visibility ?? 1 }));
+    const n = lm.length;
+    ensurePose(n);
     const a = cfg.smooth;
-    if(!smoothed || smoothed.length !== raw.length) smoothed = raw;
-    else smoothed = smoothed.map((s,i)=>({ x:s.x+(raw[i].x-s.x)*a, y:s.y+(raw[i].y-s.y)*a, v:raw[i].v }));
-    const P = smoothed;
+    if(!poseInit){
+      for(let i=0;i<n;i++){
+        const p = lm[i], q = P[i];
+        q.x = (1-p.x)*W; q.y = p.y*H; q.v = p.visibility ?? 1;
+      }
+      poseInit = true;
+    }else{
+      for(let i=0;i<n;i++){
+        const p = lm[i], q = P[i];
+        q.x += ((1-p.x)*W - q.x)*a;
+        q.y += (p.y*H - q.y)*a;
+        q.v = p.visibility ?? 1;
+      }
+    }
 
     const sm = mid(P[11],P[12]), hm = mid(P[23],P[24]);
     const shoulderW = dist(P[11],P[12]);
@@ -690,6 +1008,13 @@ function loop(){
     const tilt = Math.atan2(hm.y-sm.y, hm.x-sm.x) - Math.PI/2;
     const conf = Math.min(P[11].v,P[12].v,P[23].v,P[24].v);
     const cropped = hm.y > H*0.95 || torsoRaw > shoulderW*1.9;
+
+    if(measuring){
+      // stature en pixels : du nez aux chevilles vaut 0,891 de la hauteur totale
+      const ank = (P[27].v > 0.5 && P[28].v > 0.5) ? (P[27].y + P[28].y)/2 : 0;
+      const stature = (ank && P[0].v > 0.5) ? (ank - P[0].y)/0.891 : 0;
+      if(conf > 0.6) measuring.samples.push({ sh:shoulderW, stature });
+    }
 
     // rotation du buste. Le modèle sait de quel côté est votre épaule gauche :
     // si elle apparaît à gauche de l'écran miroir, vous êtes face à la caméra.
@@ -714,22 +1039,24 @@ function loop(){
 
     let view = views[band] || views.face;
     if(band==='profil' && views.profil && (yaw ?? 0) < 0) view = mirrorView(views.profil);
-    const LABEL = { face:'FACE', profil:'PROFIL', dos:'DOS' };
-    $('mView').textContent = (views[band] ? LABEL[band] : LABEL[band]+'*') +
-                             ' · ' + Math.round(yaw ?? 0) + '°';
 
-    $('mShoulder').textContent = Math.round(shoulderW)+' px';
-    $('mTorso').textContent    = Math.round(torso)+' px';
-    $('mAngle').textContent    = (tilt*180/Math.PI).toFixed(1)+'°';
-    if(cropped){
-      hint.textContent = 'Reculez : vos hanches sortent du cadre';
-      hint.style.opacity = '1';
-    }else{
-      hint.textContent = 'Reculez pour cadrer épaules et hanches';
-      hint.style.opacity = conf > 0.6 ? '0' : '1';
+    // Écrire dans le panneau force le navigateur à recalculer la mise en page.
+    // Personne ne lit un compteur qui change soixante fois par seconde.
+    if(show){
+      const LABEL = { face:'FACE', profil:'PROFIL', dos:'DOS' };
+      elView.textContent = (views[band] ? LABEL[band] : LABEL[band]+'*') +
+                           ' · ' + Math.round(yaw ?? 0) + '°';
+      elShoulder.textContent = Math.round(shoulderW)+' px';
+      elTorso.textContent    = Math.round(torso)+' px';
+      elAngle.textContent    = (tilt*180/Math.PI).toFixed(1)+'°';
+    }
+    if(!measuring){
+      setHint(cropped ? 'Reculez : vos hanches sortent du cadre'
+                      : 'Reculez pour cadrer épaules et hanches',
+              (cropped || conf <= 0.6) ? '1' : '0');
     }
 
-    if($('cGarment').checked && conf > 0.5 && shoulderW > 20 && torsoRaw > 20){
+    if(elGarment.checked && conf > 0.5 && shoulderW > 20 && torsoRaw > 20){
       // épaule gauche / droite à l'écran, avec le coude du même côté
       const leftIs11 = P[11].x <= P[12].x;
       const pL = leftIs11 ? P[11] : P[12], eL = leftIs11 ? P[13] : P[14];
@@ -750,11 +1077,14 @@ function loop(){
       const gw = G.width, gh = G.height;
       const seam = (N.x2-N.x1)*gw;                  // écart des coutures d'épaule
 
-      const pieces = [], holes = [];
-      const rect = (x,y,w,h)=>{ const p = new Path2D(); p.rect(x,y,w,h); return p; };
+      // Les tracés de découpe ne servent qu'au rendu de secours sur processeur.
+      // Avec la carte graphique, seuls les os comptent : construire des Path2D
+      // soixante fois par seconde pour les jeter aussitôt était du gaspillage.
+      const pieces = [], holes = [], bones = [];
+      let nSleeve = 0;
 
       let why = '';
-      if(!$('cSleeves').checked)          why = 'désactivées';
+      if(!elSleeves.checked)              why = 'désactivées';
       else if(band === 'profil')          why = 'vue de profil';
       else if(Math.min(eL.v,eR.v) <= 0.4) why = 'coudes non vus';
       else if(!N.arm)                     why = 'axe non calibré';
@@ -775,7 +1105,7 @@ function loop(){
         for(const [S,E,Wp,seamF,cuffF] of arms){
           const ax = seamF.x*gw, ay = seamF.y*gh;
           const bx = cuffF.x*gw, by = cuffF.y*gh;
-          const axisL = Math.hypot(bx-ax, by-ay);
+          const axisL = hyp(bx-ax, by-ay);
           if(axisL < gw*0.06) continue;
 
           // normale à l'axe, orientée vers le centre du vêtement (l'aisselle)
@@ -785,7 +1115,7 @@ function loop(){
           // même si la mesure sur la photo dit le contraire
           const hwPx = Math.min(Math.max(cuffF.hw*gw, 0.16*seam), 0.42*seam);
 
-          const upper = Math.hypot(E.x-S.x, E.y-S.y);
+          const upper = hyp(E.x-S.x, E.y-S.y);
           if(upper < 8) continue;
           const d1x = (E.x-S.x)/upper, d1y = (E.y-S.y)/upper;
 
@@ -793,7 +1123,7 @@ function loop(){
           let px = hm.x-S.x, py = hm.y-S.y;
           const dp = px*d1x + py*d1y;
           px -= d1x*dp; py -= d1y*dp;
-          const pn = Math.hypot(px,py) || 1; px /= pn; py /= pn;
+          const pn = hyp(px,py) || 1; px /= pn; py /= pn;
 
           // aucune manche ne dépasse deux fois et demie la carrure
           const len = Math.min(axisL*scale, shoulderW*2.5);
@@ -808,38 +1138,40 @@ function loop(){
             p.lineTo(x1-nx*e0, y1-ny*e0); p.lineTo(x0-nx*e0, y0-ny*e0);
             p.closePath(); return p;
           };
-          holes.push(quad(-0.02, 1.06, hwPx));
+          if(!MESH_OK) holes.push(quad(-0.02, 1.06, hwPx));
           const at = t => ({ x:ax+(bx-ax)*t, y:ay+(by-ay)*t });
           const perpAt = (t,s) => ({ x:ax+(bx-ax)*t+nx*s, y:ay+(by-ay)*t+ny*s });
 
           if(len <= upper*1.03 || Wp.v < 0.4){
-            pieces.push({
-              m: aff(at(0), at(1), perpAt(0,hwPx),
-                     S, {x:S.x+d1x*len, y:S.y+d1y*len}, {x:S.x+px*thick, y:S.y+py*thick}),
-              clip: quad(-0.06, 1.10, hwPx*1.15)
-            });
+            const m1 = aff(at(0), at(1), perpAt(0,hwPx),
+                           S, {x:S.x+d1x*len, y:S.y+d1y*len}, {x:S.x+px*thick, y:S.y+py*thick});
+            if(!MESH_OK) pieces.push({ m:m1, clip:quad(-0.06, 1.10, hwPx*1.15) });
+            bones.push({ ax, ay, bx, by, m:m1, r:hwPx*1.35 });
+            nSleeve++;
             continue;
           }
 
           const tm = upper/len;                    // le coude, sur l'axe de la photo
-          const fore = Math.hypot(Wp.x-E.x, Wp.y-E.y) || 1;
+          const fore = hyp(Wp.x-E.x, Wp.y-E.y) || 1;
           const d2x = (Wp.x-E.x)/fore, d2y = (Wp.y-E.y)/fore;
           const dq = px*d2x + py*d2y;
           let qx = px - d2x*dq, qy = py - d2y*dq;
-          const qn = Math.hypot(qx,qy) || 1; qx /= qn; qy /= qn;
+          const qn = hyp(qx,qy) || 1; qx /= qn; qy /= qn;
           const rest = len - upper, thick2 = thick*0.82;
 
           // avant-bras d'abord : le bras se superpose proprement au coude
-          pieces.push({
-            m: aff(at(tm), at(1), perpAt(tm,hwPx),
-                   E, {x:E.x+d2x*rest, y:E.y+d2y*rest}, {x:E.x+qx*thick2, y:E.y+qy*thick2}),
-            clip: quad(tm, 1.10, hwPx*1.15)
-          });
-          pieces.push({
-            m: aff(at(0), at(tm), perpAt(0,hwPx),
-                   S, E, {x:S.x+px*thick, y:S.y+py*thick}),
-            clip: quad(-0.06, tm, hwPx*1.15)
-          });
+          const mF = aff(at(tm), at(1), perpAt(tm,hwPx),
+                         E, {x:E.x+d2x*rest, y:E.y+d2y*rest}, {x:E.x+qx*thick2, y:E.y+qy*thick2});
+          const mU = aff(at(0), at(tm), perpAt(0,hwPx),
+                         S, E, {x:S.x+px*thick, y:S.y+py*thick});
+          if(!MESH_OK){
+            pieces.push({ m:mF, clip:quad(tm, 1.10, hwPx*1.15) });
+            pieces.push({ m:mU, clip:quad(-0.06, tm, hwPx*1.15) });
+          }
+          nSleeve += 2;
+          const A = at(0), M = at(tm), B = at(1);
+          bones.push({ ax:M.x, ay:M.y, bx:B.x, by:B.y, m:mF, r:hwPx*1.35 });
+          bones.push({ ax:A.x, ay:A.y, bx:M.x, by:M.y, m:mU, r:hwPx*1.35 });
         }
       }
 
@@ -848,74 +1180,90 @@ function loop(){
         {x:N.x1*gw, y:N.sy*gh}, {x:N.x2*gw, y:N.sy*gh}, {x:(N.x1+N.x2)/2*gw, y:N.hy*gh},
         Ap, Bp, Cp
       );
-      let clipT = null;
-      if(holes.length){
-        clipT = new Path2D();
-        clipT.rect(0, 0, gw, gh);
-        for(const h of holes) clipT.addPath(h);
-      }
-      pieces.push({ m:mT, clip:clipT, rule:'evenodd' });
-
-      const put = c => {
-        for(const p of pieces){
-          c.save();
-          c.setTransform(p.m[0],p.m[1],p.m[2],p.m[3],p.m[4],p.m[5]);
-          if(p.clip) c.clip(p.clip, p.rule || 'nonzero');
-          c.drawImage(G,0,0);
-          c.restore();
+      if(!MESH_OK){
+        let clipT = null;
+        if(holes.length){
+          clipT = new Path2D();
+          clipT.rect(0, 0, gw, gh);
+          for(const h of holes) clipT.addPath(h);
         }
-      };
-
-      lctx.clearRect(0,0,W,H);
-      put(lctx);
-
-      // seule la lumière large du corps traverse le tissu
-      if(cfg.shade > 0.01){
-        buildShading();
-        lctx.globalCompositeOperation = BLEND;
-        lctx.globalAlpha = cfg.shade;
-        lctx.imageSmoothingEnabled = true;
-        lctx.drawImage(tiny,0,0,W,H);
-        lctx.globalAlpha = 1;
-        lctx.globalCompositeOperation = 'destination-in';
-        put(lctx);
-        lctx.globalCompositeOperation = 'source-over';
+        pieces.push({ m:mT, clip:clipT, rule:'evenodd' });
       }
 
-      // la peau qui passe devant repasse au premier plan
-      if(segmenter && $('cOcclusion').checked){
+      // masque de peau : recalculé une image sur segEvery, il change lentement
+      const occOn = !!(segmenter && elOcclusion.checked);
+      if(occOn){
         try{
-          // le masque change lentement : une image sur deux suffit
-          if((segFrame++ & 1) === 0){
-            const seg = segmenter.segmentForVideo(video, performance.now());
+          if(segFrame++ % segEvery === 0){
+            const seg = segmenter.segmentForVideo(video, t0);
             const cm = seg.categoryMask;
             const mw = cm.width, mh = cm.height, arr = cm.getAsUint8Array();
             if(!maskImg || maskCv.width !== mw || maskCv.height !== mh){
               maskCv.width = mw; maskCv.height = mh;
               maskImg = mctx.createImageData(mw,mh);
+              // une vue 32 bits sur le même tampon : un pixel du masque est
+              // soit blanc opaque soit transparent, donc une seule écriture
+              // au lieu de quatre, sur les soixante-cinq mille pixels
+              mask32 = new Uint32Array(maskImg.data.buffer);
             }
-            const md = maskImg.data;
-            for(let i=0, j=0; i<arr.length; i++, j+=4){
+            for(let i=0;i<arr.length;i++){
               const c = arr[i];                     // 1 cheveux, 2 peau, 3 visage
-              md[j] = md[j+1] = md[j+2] = 0;
-              md[j+3] = (c===1 || c===2 || c===3) ? 255 : 0;
+              mask32[i] = (c===1 || c===2 || c===3) ? 0xFFFFFFFF : 0;
             }
             mctx.putImageData(maskImg,0,0);
             cm.close();
-            maskReady = true;
-          }
-          if(maskReady){
-            lctx.globalCompositeOperation = 'destination-out';
-            lctx.save(); lctx.translate(W,0); lctx.scale(-1,1);
-            lctx.drawImage(maskCv,0,0,W,H); lctx.restore();
-            lctx.globalCompositeOperation = 'source-over';
+            maskReady = true; maskDirty = true;
           }
         }catch(e){ /* une image ratée ne doit pas arrêter la boucle */ }
       }
 
-      $('mSleeve').textContent = sleeves ? (pieces.length-0)+' pièces' : why;
+      const alpha = cfg.opacity * Math.min(1,(conf-0.5)*4);
+      if(cfg.shade > 0.01){
+        drawTiny();
+        if(meanTick++ % MEAN_EVERY === 0) updateMean();
+        if(!MESH_OK) bakeShading();
+      }
 
-      if($('cSkeleton').checked && sleeves){
+      if(MESH_OK){
+        // tissu, éclairage et occlusion en une seule passe sur la carte graphique
+        warpRender(G, gw, gh, mT, bones, W, H, cfg.shade, occOn && maskReady, alpha);
+        ctx.drawImage(warpCv, 0, 0);
+      }else{
+        const put = c => {
+          for(const p of pieces){
+            c.save();
+            c.setTransform(p.m[0],p.m[1],p.m[2],p.m[3],p.m[4],p.m[5]);
+            if(p.clip) c.clip(p.clip, p.rule || 'nonzero');
+            c.drawImage(G,0,0);
+            c.restore();
+          }
+        };
+        lctx.clearRect(0,0,W,H);
+        put(lctx);
+        if(cfg.shade > 0.01){
+          lctx.globalCompositeOperation = BLEND;
+          lctx.globalAlpha = cfg.shade;
+          lctx.imageSmoothingEnabled = true;
+          lctx.drawImage(tiny,0,0,W,H);
+          lctx.globalAlpha = 1;
+          lctx.globalCompositeOperation = 'destination-in';
+          put(lctx);
+          lctx.globalCompositeOperation = 'source-over';
+        }
+        if(occOn && maskReady){
+          lctx.globalCompositeOperation = 'destination-out';
+          lctx.save(); lctx.translate(W,0); lctx.scale(-1,1);
+          lctx.drawImage(maskCv,0,0,W,H); lctx.restore();
+          lctx.globalCompositeOperation = 'source-over';
+        }
+        ctx.globalAlpha = alpha;
+        ctx.drawImage(layer,0,0);
+        ctx.globalAlpha = 1;
+      }
+
+      if(show) elSleeve.textContent = sleeves ? nSleeve+' pièces' : why;
+
+      if(elSkeleton.checked && sleeves){
         ctx.strokeStyle = 'rgba(196,102,74,.9)'; ctx.lineWidth = 3;
         for(const [S,E,Wp] of [[pL,eL,leftIs11?P[15]:P[16]],[pR,eR,leftIs11?P[16]:P[15]]]){
           ctx.beginPath(); ctx.moveTo(S.x,S.y); ctx.lineTo(E.x,E.y);
@@ -924,31 +1272,292 @@ function loop(){
         }
       }
 
-      ctx.globalAlpha = cfg.opacity * Math.min(1,(conf-0.5)*4);
-      ctx.drawImage(layer,0,0);
-      ctx.globalAlpha = 1;
     }
 
-    if($('cSkeleton').checked){
+    if(elSkeleton.checked){
       ctx.strokeStyle='rgba(200,164,92,.85)'; ctx.lineWidth=2;
       for(const [i,j] of SK){ ctx.beginPath(); ctx.moveTo(P[i].x,P[i].y); ctx.lineTo(P[j].x,P[j].y); ctx.stroke(); }
       ctx.fillStyle='#EDE6DA';
       for(const i of [11,12,23,24]){ ctx.beginPath(); ctx.arc(P[i].x,P[i].y,4,0,6.284); ctx.fill(); }
     }
   }else{
-    smoothed = null; hint.style.opacity='1';
-    $('mShoulder').textContent = $('mTorso').textContent = $('mAngle').textContent = '—';
+    poseInit = false; setHint(null, '1');
+    if(show) elShoulder.textContent = elTorso.textContent = elAngle.textContent = '—';
+  }
+
+  /* Réglage automatique. On suit le coût réel d'une image par moyenne
+     glissante, et on espace la segmentation quand la machine décroche.
+     Mieux vaut un masque de peau rafraîchi trois fois moins souvent —
+     il bouge lentement — qu'un vêtement qui saute. */
+  const spent = performance.now() - t0;
+  cost += (spent - cost) * 0.1;
+  if(++tune >= 30){
+    tune = 0;
+    if(cost > 24 && segEvery < 5) segEvery++;
+    else if(cost < 13 && segEvery > 2) segEvery--;
   }
 
   if(++fpsN >= 15){
     const now = performance.now();
-    $('mFps').textContent = Math.round(fpsN*1000/(now-fpsT));
+    elFps.textContent = Math.round(fpsN*1000/(now-fpsT)) + (segEvery > 2 ? ' ·' : '');
     fpsT = now; fpsN = 0;
   }
 }
 
+/* ---------------------------------------------------------------
+   Déformation par grille pondérée. Chaque sommet reçoit l'influence
+   de chaque os selon sa distance, ce qui rend la jonction épaule /
+   manche continue au lieu de casser sur une arête.
+   --------------------------------------------------------------- */
+const warpCv = document.createElement('canvas');
+const GX = 22, GY = 28;
+let glProg = null, glPos = null, glUV = null, glIdx = null;
+let uvArr = null, posArr = null, alphaArr = null, idxCount = 0;
+let glA = null, texShade = null, texMask = null;
+let U = null, At = null;              // emplacements, résolus une seule fois
+let maskTexW = 0, maskTexH = 0;
+
+// libère la texture d'une vue remplacée : la carte graphique ne récupère pas
+// ces objets toute seule, et changer de couleur en boucle les accumulait
+function dropView(v){
+  if(!v || !gl) return;
+  for(const cv of [v.cv, v.mirror && v.mirror.cv]){
+    if(!cv) continue;
+    const t = texCache.get(cv);
+    if(t){ gl.deleteTexture(t); texCache.delete(cv); }
+  }
+}
+
+function initGL(){
+  gl = warpCv.getContext('webgl', {
+    alpha:true, premultipliedAlpha:false, antialias:true,
+    depth:false, stencil:false, preserveDrawingBuffer:false,
+    powerPreference:'high-performance'
+  });
+  if(!gl) return false;
+
+  const sh = (t,src)=>{ const s = gl.createShader(t); gl.shaderSource(s,src); gl.compileShader(s); return s; };
+  glProg = gl.createProgram();
+  gl.attachShader(glProg, sh(gl.VERTEX_SHADER, `
+    attribute vec2 aPos; attribute vec2 aUV; attribute float aA;
+    uniform vec2 uRes; varying vec2 vUV; varying vec2 vScr; varying float vA;
+    void main(){
+      vUV = aUV; vA = aA; vScr = aPos/uRes;
+      vec2 p = vScr*2.0 - 1.0;
+      gl_Position = vec4(p.x, -p.y, 0.0, 1.0);
+    }`));
+  gl.attachShader(glProg, sh(gl.FRAGMENT_SHADER, `
+    precision mediump float;
+    varying vec2 vUV; varying vec2 vScr; varying float vA;
+    uniform sampler2D uTex, uShade, uMask;
+    uniform float uShadeAmt, uOcc, uAlpha, uMean;
+    vec3 softLight(vec3 b, float s){
+      return (s <= 0.5) ? b - (1.0-2.0*s)*b*(1.0-b)
+                        : b + (2.0*s-1.0)*(sqrt(b)-b);
+    }
+    void main(){
+      vec4 c = texture2D(uTex, vUV);
+      if(c.a < 0.02) discard;
+      if(uShadeAmt > 0.01){
+        // la texture est la vidéo réduite, encore en couleur : on en tire la
+        // luminance ici plutôt que de la cuire au processeur avant l'envoi
+        float l = dot(texture2D(uShade, vScr).rgb, vec3(0.299, 0.587, 0.114));
+        float s = clamp(0.5 + (l - uMean) * 1.5, 0.0, 1.0);
+        c.rgb = mix(c.rgb, softLight(c.rgb, s), uShadeAmt);
+      }
+      float a = c.a * vA * uAlpha;
+      if(uOcc > 0.5){
+        // le masque vient de l'image caméra non miroitée
+        a *= 1.0 - texture2D(uMask, vec2(1.0 - vScr.x, vScr.y)).a;
+      }
+      gl_FragColor = vec4(c.rgb * a, a);
+    }`));
+  gl.linkProgram(glProg);
+  if(!gl.getProgramParameter(glProg, gl.LINK_STATUS)){ gl = null; return false; }
+  gl.useProgram(glProg);
+
+  // getUniformLocation et getAttribLocation sont des recherches par nom qui
+  // traversent le pilote. Huit par image, c'était huit de trop.
+  U = {};
+  for(const k of ['uRes','uShadeAmt','uOcc','uAlpha','uMean','uTex','uShade','uMask'])
+    U[k] = gl.getUniformLocation(glProg, k);
+  At = {};
+  for(const k of ['aPos','aUV','aA']) At[k] = gl.getAttribLocation(glProg, k);
+
+  const uv = [], idx = [];
+  for(let j=0;j<=GY;j++) for(let i=0;i<=GX;i++) uv.push(i/GX, j/GY);
+  for(let j=0;j<GY;j++) for(let i=0;i<GX;i++){
+    const a = j*(GX+1)+i, b = a+1, c = a+GX+1, d = c+1;
+    idx.push(a,c,b, b,c,d);
+  }
+  uvArr  = new Float32Array(uv);
+  posArr = new Float32Array(uv.length);
+  idxCount = idx.length;
+
+  alphaArr = new Float32Array(uv.length/2);
+
+  texShade = gl.createTexture();
+  texMask  = gl.createTexture();
+  for(const t of [texShade, texMask]){
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  }
+  // texImage2D réalloue la texture à chaque appel ; texSubImage2D se contente
+  // d'écrire dedans. On dimensionne donc l'ombrage dès maintenant.
+  gl.bindTexture(gl.TEXTURE_2D, texShade);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, tiny.width, tiny.height, 0,
+                gl.RGBA, gl.UNSIGNED_BYTE, null);
+
+  glUV = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, glUV);
+  gl.bufferData(gl.ARRAY_BUFFER, uvArr, gl.STATIC_DRAW);
+  glPos = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, glPos);
+  gl.bufferData(gl.ARRAY_BUFFER, posArr.byteLength, gl.DYNAMIC_DRAW);
+  glA = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, glA);
+  gl.bufferData(gl.ARRAY_BUFFER, alphaArr.byteLength, gl.DYNAMIC_DRAW);
+  glIdx = gl.createBuffer();
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, glIdx);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(idx), gl.STATIC_DRAW);
+
+  // état constant d'une image à l'autre : posé une fois, jamais renvoyé
+  gl.bindBuffer(gl.ARRAY_BUFFER, glPos);
+  gl.enableVertexAttribArray(At.aPos);
+  gl.vertexAttribPointer(At.aPos, 2, gl.FLOAT, false, 0, 0);
+  gl.bindBuffer(gl.ARRAY_BUFFER, glA);
+  gl.enableVertexAttribArray(At.aA);
+  gl.vertexAttribPointer(At.aA, 1, gl.FLOAT, false, 0, 0);
+  gl.bindBuffer(gl.ARRAY_BUFFER, glUV);
+  gl.enableVertexAttribArray(At.aUV);
+  gl.vertexAttribPointer(At.aUV, 2, gl.FLOAT, false, 0, 0);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, glIdx);
+
+  gl.uniform1i(U.uTex, 0);
+  gl.uniform1i(U.uShade, 1);
+  gl.uniform1i(U.uMask, 2);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, texShade);
+  gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, texMask);
+  gl.activeTexture(gl.TEXTURE0);
+
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+  gl.clearColor(0,0,0,0);
+  return true;
+}
+
+function texFor(cv){
+  let t = texCache.get(cv);
+  if(t) return t;
+  t = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, cv);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  texCache.set(cv, t);
+  return t;
+}
+
+// distance d'un point au segment [a,b], en coordonnées de la photo
+function distSeg(x,y, ax,ay, bx,by){
+  const vx = bx-ax, vy = by-ay;
+  const L2 = vx*vx + vy*vy || 1;
+  let t = ((x-ax)*vx + (y-ay)*vy)/L2;
+  t = t<0?0:t>1?1:t;
+  const dx = x - (ax+vx*t), dy = y - (ay+vy*t);
+  return Math.sqrt(dx*dx + dy*dy);
+}
+
+function warpRender(G, gw, gh, mT, bones, W, H, shadeAmt, occ, alpha){
+  if(warpCv.width !== W || warpCv.height !== H){ warpCv.width = W; warpCv.height = H; }
+
+  // On sort les coefficients de la matrice du torse de la boucle : lire six
+  // cases d'un tableau six cent fois par image finit par compter.
+  const t0=mT[0], t1=mT[1], t2=mT[2], t3=mT[3], t4=mT[4], t5=mT[5];
+  const nb = bones.length;
+
+  for(let k=0, n=uvArr.length; k<n; k+=2){
+    const sx = uvArr[k]*gw, sy = uvArr[k+1]*gh;
+    let dx = 0, dy = 0, sum = 0, used = 0;
+    for(let bi=0; bi<nb; bi++){
+      const b = bones[bi];
+      const d = distSeg(sx,sy, b.ax,b.ay, b.bx,b.by);
+      if(d >= b.r) continue;
+      const t = 1 - d/b.r, w = t*t*t;
+      const m = b.m;
+      dx += (m[0]*sx + m[2]*sy + m[4])*w;
+      dy += (m[1]*sx + m[3]*sy + m[5])*w;
+      sum += w; used += w;
+    }
+    const wt = used < 1 ? 1 - used : 0;                 // le torse reprend le reste
+    if(wt > 0){
+      dx += (t0*sx + t2*sy + t4)*wt;
+      dy += (t1*sx + t3*sy + t5)*wt;
+      sum += wt;
+    }
+    posArr[k] = dx/sum; posArr[k+1] = dy/sum;
+  }
+
+  // une maille trop étirée n'est plus du tissu : on l'efface au lieu de la filer
+  const refX = hyp(t0, t1) * (gw/GX) || 1;
+  const refY = hyp(t2, t3) * (gh/GY) || 1;
+  const row = GX+1;
+  for(let j=0;j<=GY;j++) for(let i=0;i<=GX;i++){
+    const v = j*row + i, k = v*2;
+    const hn = (i<GX ? v+1 : v-1)*2, vn = (j<GY ? v+row : v-row)*2;
+    const ex = hyp(posArr[hn]-posArr[k], posArr[hn+1]-posArr[k+1]) / refX;
+    const ey = hyp(posArr[vn]-posArr[k], posArr[vn+1]-posArr[k+1]) / refY;
+    const st = ex > ey ? ex : ey;
+    alphaArr[v] = st <= 1.55 ? 1 : Math.max(0, 1 - (st-1.55)/0.85);
+  }
+
+  gl.viewport(0,0,W,H);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.uniform2f(U.uRes, W, H);
+  gl.uniform1f(U.uShadeAmt, shadeAmt);
+  gl.uniform1f(U.uOcc, occ ? 1 : 0);
+  gl.uniform1f(U.uAlpha, alpha);
+  gl.uniform1f(U.uMean, shadeMean);
+
+  // les pointeurs d'attributs sont posés une fois pour toutes dans initGL :
+  // il ne reste qu'à réécrire le contenu des deux tampons dynamiques
+  gl.bindBuffer(gl.ARRAY_BUFFER, glPos);
+  gl.bufferSubData(gl.ARRAY_BUFFER, 0, posArr);
+  gl.bindBuffer(gl.ARRAY_BUFFER, glA);
+  gl.bufferSubData(gl.ARRAY_BUFFER, 0, alphaArr);
+
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, texFor(G));
+
+  if(shadeAmt > 0.01){
+    gl.activeTexture(gl.TEXTURE1);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, tiny);
+  }
+
+  if(occ && maskDirty){
+    gl.activeTexture(gl.TEXTURE2);
+    if(maskTexW !== maskCv.width || maskTexH !== maskCv.height){
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, maskCv);
+      maskTexW = maskCv.width; maskTexH = maskCv.height;
+    }else{
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, maskCv);
+    }
+    maskDirty = false;
+  }
+
+  gl.drawElements(gl.TRIANGLES, idxCount, gl.UNSIGNED_SHORT, 0);
+}
+
+const MESH_OK = initGL();
+
 const mid  = (a,b)=>({x:(a.x+b.x)/2, y:(a.y+b.y)/2});
-const dist = (a,b)=>Math.hypot(a.x-b.x, a.y-b.y);
+const dist = (a,b)=>hyp(a.x-b.x, a.y-b.y);
 
 // matrice affine envoyant trois points source sur trois points destination
 function aff(s1,s2,s3, d1,d2,d3){
@@ -962,16 +1571,6 @@ function aff(s1,s2,s3, d1,d2,d3){
 
 // dernières proportions mesurées, pour donner à l'avatar ta morphologie
 let lastRatio = 1.35;
-
-// on réduit avant de stocker : le quota du navigateur est vite atteint
-function packView(v){
-  if(!v) return null;
-  const s = Math.min(1, 512/Math.max(v.cv.width, v.cv.height));
-  const c = document.createElement('canvas');
-  c.width = Math.round(v.cv.width*s); c.height = Math.round(v.cv.height*s);
-  c.getContext('2d').drawImage(v.cv,0,0,c.width,c.height);
-  return { img:c.toDataURL('image/png'), anch:v.anch };
-}
 
 $('btn3d').onclick = ()=>{
   if(!views.face){ statusEl.textContent = 'Calibrez au moins la face'; return; }
