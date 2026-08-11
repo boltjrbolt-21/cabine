@@ -205,6 +205,31 @@ uiReady = function(){
   toast('Cabine ouverte');
 };
 
+/* ---------- rotation du buste ----------
+   Le moteur pousse ici son angle mesuré. Sans cet affichage, une bascule
+   de vue qui ne se déclenche pas est indiagnosticable : on ne sait pas si
+   c'est le seuil, la mesure, ou la vue qui manque. */
+const LOCK_LABEL = { face:'Face', profil:'Profil', dos:'Dos' };
+let rotSeen = false;
+uiRotation = function(band, deg, calibree, conf){
+  if(!sheetNow || sheetNow.id !== 'shViews') return;   // invisible : rien à peindre
+  const a = Math.min(180, Math.abs(deg));
+  el('#rotDeg').textContent = Math.round(deg) + '°';
+  el('#rotFill').style.width = (a/180*100).toFixed(1) + '%';
+  const b = el('#rotBand');
+  b.textContent = LOCK_LABEL[band] + (calibree ? '' : ' — non calibrée');
+  b.classList.toggle('miss', !calibree);
+  if(!rotSeen && conf > 0.5){ rotSeen = true; el('#rotNote').textContent =
+    'La mesure suit votre rotation. Si le dos ne s’active jamais, forcez-le ci-dessous.'; }
+};
+
+for(const b of els('#viewLock button')) b.onclick = ()=>{
+  viewLock = b.dataset.lock || null;
+  for(const o of els('#viewLock button'))
+    o.setAttribute('aria-pressed', String(o === b));
+  toast(viewLock ? 'Vue forcée : ' + LOCK_LABEL[viewLock] : 'Bascule automatique');
+};
+
 /* ---------- réglages : affichage en pourcentage + remplissage ---------- */
 function paintRange(r){
   const p = (r.value - r.min) / (r.max - r.min) * 100;

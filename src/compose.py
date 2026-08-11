@@ -153,7 +153,7 @@ prelude = """/* Pont moteur <-> interface. Declare en var : le moteur touche a
    la couche interface plus bas ne soit arrivee a sa ligne. */
 var liveOn = false, booting = false;
 var uiToast, uiGuide, uiCalibrated, uiSyncDock, uiCalibTick, uiMeasured,
-    uiMode, uiReady;
+    uiMode, uiReady, uiRotation;
 
 /* Les trois boutons de vue sont fabriques ici : le moteur les cherche
    des son evaluation, ils doivent donc exister avant lui. */

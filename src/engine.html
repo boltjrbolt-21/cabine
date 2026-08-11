@@ -340,6 +340,26 @@ const A_DEF = { sy:0.145, x1:0.293, x2:0.707, hy:0.948,
 // une entrée par orientation : { cv, anch, mirror }
 const views = { face:null, profil:null, dos:null };
 let slot = 'face';
+
+// orientation nominale de chaque vue, en degrés de rotation du buste
+const VIEW_ANGLE = { face:0, profil:90, dos:180 };
+let viewLock = null;          // null = bascule automatique
+
+/* Quand la vue réclamée n'était pas calibrée, on retombait toujours sur la
+   face. Avec une face et un dos calibrés mais pas de profil, toute la
+   rotation — de 42° à 146° — affichait donc l'avant du vêtement plaqué sur
+   un torse qui tourne. On choisit désormais la vue calibrée dont
+   l'orientation est la plus proche de la vôtre. */
+function pickView(band, av){
+  if(views[band]) return views[band];
+  let best = null, bestD = Infinity;
+  for(const k of ['face','profil','dos']){
+    if(!views[k]) continue;
+    const d = Math.abs(VIEW_ANGLE[k] - av);
+    if(d < bestD){ bestD = d; best = views[k]; }
+  }
+  return best || views.face;
+}
 let calib = null;
 let visionFiles = null;
 let segImg = null;
@@ -1045,25 +1065,45 @@ function loop(){
     // si elle apparaît à gauche de l'écran miroir, vous êtes face à la caméra.
     const wl = res.worldLandmarks?.[0];
     if(wl){
-      const dxw = wl[12].x - wl[11].x, dzw = wl[12].z - wl[11].z;
-      const t = Math.atan2(Math.abs(dzw), Math.abs(dxw))*180/Math.PI;   // 0 face, 90 profil
-      const side = dzw >= 0 ? 1 : -1;
-      const facing = P[11].x < P[12].x;
-      const raw = side * (facing ? t : 180 - t);
-      yaw = yaw===null ? raw : yaw + angDiff(raw,yaw)*0.25;
-    }
-    const av = Math.abs(yaw ?? 0), m = 12;
-    if(band === 'face'){
-      if(av > 46+m) band = av > 134+m ? 'dos' : 'profil';
-    }else if(band === 'profil'){
-      if(av < 46-m) band = 'face';
-      else if(av > 134+m) band = 'dos';
-    }else{
-      if(av < 134-m) band = av < 46-m ? 'face' : 'profil';
-    }
+      /* Le repère 3D porte déjà tout : la profondeur dit quelle épaule est
+         la plus proche, et le signe de l'écart horizontal dit si vous êtes
+         de face ou de dos. La version précédente passait les deux par
+         Math.abs(), ce qui écrasait justement cette information : l'angle
+         se repliait à 90° et redescendait au lieu d'aller jusqu'à 180.
+         Face et dos devenaient indiscernables, et la vue de dos calibrée
+         n'était jamais atteinte.
 
-    let view = views[band] || views.face;
-    if(band==='profil' && views.profil && (yaw ?? 0) < 0) view = mirrorView(views.profil);
+         Elle rattrapait le signe avec une comparaison 2D des épaules —
+         mais de profil les deux se projettent au même endroit, si bien que
+         ce test basculait au gré du bruit. atan2 signé n'a besoin de rien
+         d'autre : 0° de face, ±90° de profil, ±180° de dos. */
+      const dxw = wl[12].x - wl[11].x, dzw = wl[12].z - wl[11].z;
+      const raw = Math.atan2(dzw, -dxw)*180/Math.PI;
+      yaw = yaw===null ? raw : yaw + angDiff(raw,yaw)*0.25;
+      /* angDiff renvoie bien le plus court chemin, mais l'angle lissé, lui,
+         n'était jamais ramené dans son intervalle. En oscillant autour de
+         ±180° — c'est-à-dire dos à la caméra — il dérivait au-delà, et
+         Math.abs() le laissait alors franchir tous les seuils : la vue
+         restait bloquée sur le dos sans jamais en redescendre. */
+      if(yaw > 180) yaw -= 360; else if(yaw < -180) yaw += 360;
+    }
+    /* Seuils de bascule. Le dos entrait à 146°, soit un demi-tour presque
+       complet — or au-delà de 120° le modèle de pose perd déjà le corps, si
+       bien que la vue de dos calibrée n'était quasiment jamais atteinte. */
+    const A_PROFIL = 42, A_DOS = 118, m = 10;
+    const av = Math.abs(yaw ?? 0);
+    if(band === 'face'){
+      if(av > A_PROFIL+m) band = av > A_DOS+m ? 'dos' : 'profil';
+    }else if(band === 'profil'){
+      if(av < A_PROFIL-m) band = 'face';
+      else if(av > A_DOS+m) band = 'dos';
+    }else{
+      if(av < A_DOS-m) band = av < A_PROFIL-m ? 'face' : 'profil';
+    }
+    if(viewLock) band = viewLock;
+
+    let view = pickView(band, av);
+    if(view === views.profil && (yaw ?? 0) < 0) view = mirrorView(views.profil);
 
     // Écrire dans le panneau force le navigateur à recalculer la mise en page.
     // Personne ne lit un compteur qui change soixante fois par seconde.
@@ -1071,6 +1111,9 @@ function loop(){
       const LABEL = { face:'FACE', profil:'PROFIL', dos:'DOS' };
       elView.textContent = (views[band] ? LABEL[band] : LABEL[band]+'*') +
                            ' · ' + Math.round(yaw ?? 0) + '°';
+      // l'interface montre la rotation en direct : sans elle, une bascule
+      // qui ne se déclenche pas reste impossible à diagnostiquer
+      if(uiRotation) uiRotation(band, yaw ?? 0, !!views[band], conf);
       elShoulder.textContent = Math.round(shoulderW)+' px';
       elTorso.textContent    = Math.round(torso)+' px';
       elAngle.textContent    = (tilt*180/Math.PI).toFixed(1)+'°';

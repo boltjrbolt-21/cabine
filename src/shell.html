@@ -326,6 +326,29 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;bor
 .stick{position:sticky;bottom:0;padding:14px 0 4px;
   background:linear-gradient(0deg,var(--bg) 62%,transparent)}
 
+/* indicateur de rotation du buste */
+#rotBox{border:1px solid var(--line);border-radius:var(--r-m);background:var(--card);
+  padding:14px 15px;margin-bottom:6px}
+#rotHead{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:11px}
+#rotBand{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--muted)}
+#rotBand.miss{color:var(--alert)}
+#rotDeg{font-size:20px;font-weight:700;color:var(--gold);font-variant-numeric:tabular-nums}
+#rotBar{position:relative;height:6px;border-radius:3px;background:rgba(232,200,154,.13)}
+#rotFill{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:3px;
+  background:var(--grad);transition:width .12s linear}
+#rotBar u{position:absolute;top:-3px;bottom:-3px;width:1px;background:var(--line-2)}
+#rotMarkA{left:23.3%}   /* seuil profil, 42 sur 180 */
+#rotMarkB{left:65.6%}   /* seuil dos, 118 sur 180 */
+#rotLegend{display:flex;justify-content:space-between;margin-top:7px;
+  font-size:10px;color:var(--muted)}
+#rotNote{font-size:11.5px;line-height:1.5;color:var(--muted);margin-top:11px}
+.seg4{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:6px}
+.seg4 button{padding:11px 4px;border:1px solid var(--line);border-radius:var(--r-s);
+  background:var(--card);font-size:12px;font-weight:500;color:var(--text)}
+.seg4 button[aria-pressed=true]{background:var(--grad);color:#1A1206;
+  border-color:transparent;font-weight:600}
+
 /* vues et pastilles : ces éléments sont fabriqués par le moteur */
 .vw{display:flex;flex-direction:column;align-items:center;gap:5px;padding:16px 6px;
   border:1px solid var(--line);border-radius:var(--r-m);background:var(--card);
@@ -697,8 +720,26 @@ input[type=file]{display:none}
   <div class="sheet-h"><b>Vues du vêtement</b>
     <button class="icobtn" data-close><svg viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>
   <div class="sheet-b">
-    <p class="note" style="margin:0 0 14px">La bascule est automatique : elle suit votre rotation réelle
-      devant la caméra. Ajoutez une photo par orientation pour que le vêtement reste juste quand vous tournez.</p>
+    <div id="rotBox">
+      <div id="rotHead"><span id="rotBand">—</span><b id="rotDeg">0°</b></div>
+      <div id="rotBar"><i id="rotFill"></i><u id="rotMarkA"></u><u id="rotMarkB"></u></div>
+      <div id="rotLegend"><span>Face</span><span>Profil</span><span>Dos</span></div>
+      <p id="rotNote">Tournez-vous devant la caméra : l'angle mesuré doit bouger.
+        S'il reste bloqué, forcez la vue ci-dessous.</p>
+    </div>
+
+    <h3>Vue affichée</h3>
+    <div class="seg4" id="viewLock">
+      <button data-lock="" aria-pressed="true">Auto</button>
+      <button data-lock="face" aria-pressed="false">Face</button>
+      <button data-lock="profil" aria-pressed="false">Profil</button>
+      <button data-lock="dos" aria-pressed="false">Dos</button>
+    </div>
+
+    <h3>Photos calibrées</h3>
+    <p class="note" style="margin:0 0 12px">Une vue non calibrée est remplacée par la plus
+      proche de votre orientation — avec seulement la face et le dos, tourner bascule sur le dos
+      à mi-rotation au lieu de rester bloqué sur l'avant.</p>
     <div id="views" class="grid3"></div>
     <h3>Couleur du t-shirt de démonstration</h3>
     <div id="swatches" style="display:flex;gap:10px;flex-wrap:wrap"></div>
