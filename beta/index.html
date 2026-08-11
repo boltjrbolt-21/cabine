@@ -326,6 +326,29 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;bor
 .stick{position:sticky;bottom:0;padding:14px 0 4px;
   background:linear-gradient(0deg,var(--bg) 62%,transparent)}
 
+/* indicateur de rotation du buste */
+#rotBox{border:1px solid var(--line);border-radius:var(--r-m);background:var(--card);
+  padding:14px 15px;margin-bottom:6px}
+#rotHead{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:11px}
+#rotBand{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--muted)}
+#rotBand.miss{color:var(--alert)}
+#rotDeg{font-size:20px;font-weight:700;color:var(--gold);font-variant-numeric:tabular-nums}
+#rotBar{position:relative;height:6px;border-radius:3px;background:rgba(232,200,154,.13)}
+#rotFill{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:3px;
+  background:var(--grad);transition:width .12s linear}
+#rotBar u{position:absolute;top:-3px;bottom:-3px;width:1px;background:var(--line-2)}
+#rotMarkA{left:23.3%}   /* seuil profil, 42 sur 180 */
+#rotMarkB{left:65.6%}   /* seuil dos, 118 sur 180 */
+#rotLegend{display:flex;justify-content:space-between;margin-top:7px;
+  font-size:10px;color:var(--muted)}
+#rotNote{font-size:11.5px;line-height:1.5;color:var(--muted);margin-top:11px}
+.seg4{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:6px}
+.seg4 button{padding:11px 4px;border:1px solid var(--line);border-radius:var(--r-s);
+  background:var(--card);font-size:12px;font-weight:500;color:var(--text)}
+.seg4 button[aria-pressed=true]{background:var(--grad);color:#1A1206;
+  border-color:transparent;font-weight:600}
+
 /* vues et pastilles : ces éléments sont fabriqués par le moteur */
 .vw{display:flex;flex-direction:column;align-items:center;gap:5px;padding:16px 6px;
   border:1px solid var(--line);border-radius:var(--r-m);background:var(--card);
@@ -697,8 +720,26 @@ input[type=file]{display:none}
   <div class="sheet-h"><b>Vues du vêtement</b>
     <button class="icobtn" data-close><svg viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>
   <div class="sheet-b">
-    <p class="note" style="margin:0 0 14px">La bascule est automatique : elle suit votre rotation réelle
-      devant la caméra. Ajoutez une photo par orientation pour que le vêtement reste juste quand vous tournez.</p>
+    <div id="rotBox">
+      <div id="rotHead"><span id="rotBand">—</span><b id="rotDeg">0°</b></div>
+      <div id="rotBar"><i id="rotFill"></i><u id="rotMarkA"></u><u id="rotMarkB"></u></div>
+      <div id="rotLegend"><span>Face</span><span>Profil</span><span>Dos</span></div>
+      <p id="rotNote">Tournez-vous devant la caméra : l'angle mesuré doit bouger.
+        S'il reste bloqué, forcez la vue ci-dessous.</p>
+    </div>
+
+    <h3>Vue affichée</h3>
+    <div class="seg4" id="viewLock">
+      <button data-lock="" aria-pressed="true">Auto</button>
+      <button data-lock="face" aria-pressed="false">Face</button>
+      <button data-lock="profil" aria-pressed="false">Profil</button>
+      <button data-lock="dos" aria-pressed="false">Dos</button>
+    </div>
+
+    <h3>Photos calibrées</h3>
+    <p class="note" style="margin:0 0 12px">Une vue non calibrée est remplacée par la plus
+      proche de votre orientation — avec seulement la face et le dos, tourner bascule sur le dos
+      à mi-rotation au lieu de rester bloqué sur l'avant.</p>
     <div id="views" class="grid3"></div>
     <h3>Couleur du t-shirt de démonstration</h3>
     <div id="swatches" style="display:flex;gap:10px;flex-wrap:wrap"></div>
@@ -774,7 +815,7 @@ input[type=file]{display:none}
    la couche interface plus bas ne soit arrivee a sa ligne. */
 var liveOn = false, booting = false;
 var uiToast, uiGuide, uiCalibrated, uiSyncDock, uiCalibTick, uiMeasured,
-    uiMode, uiReady;
+    uiMode, uiReady, uiRotation;
 
 /* Les trois boutons de vue sont fabriques ici : le moteur les cherche
    des son evaluation, ils doivent donc exister avant lui. */
@@ -886,6 +927,26 @@ const A_DEF = { sy:0.145, x1:0.293, x2:0.707, hy:0.948,
 // une entrée par orientation : { cv, anch, mirror }
 const views = { face:null, profil:null, dos:null };
 let slot = 'face';
+
+// orientation nominale de chaque vue, en degrés de rotation du buste
+const VIEW_ANGLE = { face:0, profil:90, dos:180 };
+let viewLock = null;          // null = bascule automatique
+
+/* Quand la vue réclamée n'était pas calibrée, on retombait toujours sur la
+   face. Avec une face et un dos calibrés mais pas de profil, toute la
+   rotation — de 42° à 146° — affichait donc l'avant du vêtement plaqué sur
+   un torse qui tourne. On choisit désormais la vue calibrée dont
+   l'orientation est la plus proche de la vôtre. */
+function pickView(band, av){
+  if(views[band]) return views[band];
+  let best = null, bestD = Infinity;
+  for(const k of ['face','profil','dos']){
+    if(!views[k]) continue;
+    const d = Math.abs(VIEW_ANGLE[k] - av);
+    if(d < bestD){ bestD = d; best = views[k]; }
+  }
+  return best || views.face;
+}
 let calib = null;
 let visionFiles = null;
 let segImg = null;
@@ -1604,25 +1665,45 @@ function loop(){
     // si elle apparaît à gauche de l'écran miroir, vous êtes face à la caméra.
     const wl = res.worldLandmarks?.[0];
     if(wl){
-      const dxw = wl[12].x - wl[11].x, dzw = wl[12].z - wl[11].z;
-      const t = Math.atan2(Math.abs(dzw), Math.abs(dxw))*180/Math.PI;   // 0 face, 90 profil
-      const side = dzw >= 0 ? 1 : -1;
-      const facing = P[11].x < P[12].x;
-      const raw = side * (facing ? t : 180 - t);
-      yaw = yaw===null ? raw : yaw + angDiff(raw,yaw)*0.25;
-    }
-    const av = Math.abs(yaw ?? 0), m = 12;
-    if(band === 'face'){
-      if(av > 46+m) band = av > 134+m ? 'dos' : 'profil';
-    }else if(band === 'profil'){
-      if(av < 46-m) band = 'face';
-      else if(av > 134+m) band = 'dos';
-    }else{
-      if(av < 134-m) band = av < 46-m ? 'face' : 'profil';
-    }
+      /* Le repère 3D porte déjà tout : la profondeur dit quelle épaule est
+         la plus proche, et le signe de l'écart horizontal dit si vous êtes
+         de face ou de dos. La version précédente passait les deux par
+         Math.abs(), ce qui écrasait justement cette information : l'angle
+         se repliait à 90° et redescendait au lieu d'aller jusqu'à 180.
+         Face et dos devenaient indiscernables, et la vue de dos calibrée
+         n'était jamais atteinte.
 
-    let view = views[band] || views.face;
-    if(band==='profil' && views.profil && (yaw ?? 0) < 0) view = mirrorView(views.profil);
+         Elle rattrapait le signe avec une comparaison 2D des épaules —
+         mais de profil les deux se projettent au même endroit, si bien que
+         ce test basculait au gré du bruit. atan2 signé n'a besoin de rien
+         d'autre : 0° de face, ±90° de profil, ±180° de dos. */
+      const dxw = wl[12].x - wl[11].x, dzw = wl[12].z - wl[11].z;
+      const raw = Math.atan2(dzw, -dxw)*180/Math.PI;
+      yaw = yaw===null ? raw : yaw + angDiff(raw,yaw)*0.25;
+      /* angDiff renvoie bien le plus court chemin, mais l'angle lissé, lui,
+         n'était jamais ramené dans son intervalle. En oscillant autour de
+         ±180° — c'est-à-dire dos à la caméra — il dérivait au-delà, et
+         Math.abs() le laissait alors franchir tous les seuils : la vue
+         restait bloquée sur le dos sans jamais en redescendre. */
+      if(yaw > 180) yaw -= 360; else if(yaw < -180) yaw += 360;
+    }
+    /* Seuils de bascule. Le dos entrait à 146°, soit un demi-tour presque
+       complet — or au-delà de 120° le modèle de pose perd déjà le corps, si
+       bien que la vue de dos calibrée n'était quasiment jamais atteinte. */
+    const A_PROFIL = 42, A_DOS = 118, m = 10;
+    const av = Math.abs(yaw ?? 0);
+    if(band === 'face'){
+      if(av > A_PROFIL+m) band = av > A_DOS+m ? 'dos' : 'profil';
+    }else if(band === 'profil'){
+      if(av < A_PROFIL-m) band = 'face';
+      else if(av > A_DOS+m) band = 'dos';
+    }else{
+      if(av < A_DOS-m) band = av < A_PROFIL-m ? 'face' : 'profil';
+    }
+    if(viewLock) band = viewLock;
+
+    let view = pickView(band, av);
+    if(view === views.profil && (yaw ?? 0) < 0) view = mirrorView(views.profil);
 
     // Écrire dans le panneau force le navigateur à recalculer la mise en page.
     // Personne ne lit un compteur qui change soixante fois par seconde.
@@ -1630,6 +1711,9 @@ function loop(){
       const LABEL = { face:'FACE', profil:'PROFIL', dos:'DOS' };
       elView.textContent = (views[band] ? LABEL[band] : LABEL[band]+'*') +
                            ' · ' + Math.round(yaw ?? 0) + '°';
+      // l'interface montre la rotation en direct : sans elle, une bascule
+      // qui ne se déclenche pas reste impossible à diagnostiquer
+      if(uiRotation) uiRotation(band, yaw ?? 0, !!views[band], conf);
       elShoulder.textContent = Math.round(shoulderW)+' px';
       elTorso.textContent    = Math.round(torso)+' px';
       elAngle.textContent    = (tilt*180/Math.PI).toFixed(1)+'°';
@@ -2419,6 +2503,31 @@ uiReady = function(){
   el('#liveDot').classList.add('on');
   el('#stage').classList.add('live');
   toast('Cabine ouverte');
+};
+
+/* ---------- rotation du buste ----------
+   Le moteur pousse ici son angle mesuré. Sans cet affichage, une bascule
+   de vue qui ne se déclenche pas est indiagnosticable : on ne sait pas si
+   c'est le seuil, la mesure, ou la vue qui manque. */
+const LOCK_LABEL = { face:'Face', profil:'Profil', dos:'Dos' };
+let rotSeen = false;
+uiRotation = function(band, deg, calibree, conf){
+  if(!sheetNow || sheetNow.id !== 'shViews') return;   // invisible : rien à peindre
+  const a = Math.min(180, Math.abs(deg));
+  el('#rotDeg').textContent = Math.round(deg) + '°';
+  el('#rotFill').style.width = (a/180*100).toFixed(1) + '%';
+  const b = el('#rotBand');
+  b.textContent = LOCK_LABEL[band] + (calibree ? '' : ' — non calibrée');
+  b.classList.toggle('miss', !calibree);
+  if(!rotSeen && conf > 0.5){ rotSeen = true; el('#rotNote').textContent =
+    'La mesure suit votre rotation. Si le dos ne s’active jamais, forcez-le ci-dessous.'; }
+};
+
+for(const b of els('#viewLock button')) b.onclick = ()=>{
+  viewLock = b.dataset.lock || null;
+  for(const o of els('#viewLock button'))
+    o.setAttribute('aria-pressed', String(o === b));
+  toast(viewLock ? 'Vue forcée : ' + LOCK_LABEL[viewLock] : 'Bascule automatique');
 };
 
 /* ---------- réglages : affichage en pourcentage + remplissage ---------- */
