@@ -211,7 +211,7 @@ uiReady = function(){
    c'est le seuil, la mesure, ou la vue qui manque. */
 const LOCK_LABEL = { face:'Face', profil:'Profil', dos:'Dos' };
 let rotMax = 0;
-uiRotation = function(band, deg, calibree, conf){
+uiRotation = function(band, deg, calibree, conf, flip){
   const a = Math.min(180, Math.abs(deg));
   // Le maximum se mémorise même feuille fermée : dos tourné, l'écran n'est
   // plus visible, et c'est précisément l'angle qu'on cherche à connaître.
@@ -220,6 +220,7 @@ uiRotation = function(band, deg, calibree, conf){
   el('#rotDeg').textContent = Math.round(deg) + '°';
   el('#rotFill').style.width = (a/180*100).toFixed(1) + '%';
   el('#rotMax').textContent = rotMax ? Math.round(rotMax) + '°' : '—';
+  el('#rotFlip').textContent = flip ? 'corrigée automatiquement' : 'conforme';
   const b = el('#rotBand');
   b.textContent = LOCK_LABEL[band] + (calibree ? '' : ' — non calibrée');
   b.classList.toggle('miss', !calibree);

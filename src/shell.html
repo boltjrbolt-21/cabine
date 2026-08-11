@@ -724,15 +724,19 @@ input[type=file]{display:none}
       <div id="rotHead"><span id="rotBand">—</span><b id="rotDeg">0°</b></div>
       <div id="rotBar"><i id="rotFill"></i><u id="rotMarkA"></u><u id="rotMarkB"></u></div>
       <div id="rotLegend"><span>Face</span><span>Profil</span><span>Dos</span></div>
-      <div class="kv" style="border:none;padding:12px 0 0">
+      <div class="kv" style="padding:12px 0 9px">
         <span class="k">Angle maximal atteint</span>
         <span class="v" id="rotMax">—</span></div>
+      <div class="kv" style="border:none;padding:0">
+        <span class="k">Orientation de la mesure</span>
+        <span class="v" id="rotFlip">—</span></div>
       <div class="duo" style="margin:8px 0 0">
         <button id="rotReset">Remettre à zéro</button>
         <button id="rotHelp">Comment lire ?</button>
       </div>
-      <p id="rotNote">Dos tourné, vous ne voyez plus l'écran : le maximum est
-        mémorisé pour vous. Tournez lentement sur 360°, revenez, puis lisez-le.</p>
+      <p id="rotNote">Le sens avant/arrière se vérifie tout seul : quand votre
+        visage est vu, l'angle doit être petit, sinon la mesure est retournée.
+        Dos tourné vous ne voyez plus l'écran, alors le maximum est mémorisé.</p>
     </div>
 
     <h3>Vue affichée</h3>

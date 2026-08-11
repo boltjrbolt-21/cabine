@@ -31,7 +31,13 @@ function pose(){
   // de profil, les épaules se rapprochent à l'écran ; de dos, elles se croisent
   const w = Math.cos(currentYaw() * Math.PI / 180);
   const cx = 0.5 + sway;
-  P[0]  = { x:cx,          y:0.13, z:0, visibility:.98 };  // nez
+  /* Le visage cesse d'être vu quand on tourne le dos : c'est ce signal qui
+     permet au moteur de vérifier le sens de sa mesure de profondeur. */
+  const a = Math.abs(currentYaw());
+  const fv = a < 75 ? 0.97 : a < 110 ? 0.55 : 0.12;
+  P[0]  = { x:cx,          y:0.13, z:0, visibility:fv };   // nez
+  P[2]  = { x:cx+0.03,     y:0.12, z:0, visibility:fv };   // œil gauche
+  P[5]  = { x:cx-0.03,     y:0.12, z:0, visibility:fv };   // œil droit
   P[11] = { x:cx+0.115*w,  y:0.29, z:0, visibility:.97 };  // épaule gauche
   P[12] = { x:cx-0.115*w,  y:0.29, z:0, visibility:.97 };  // épaule droite
   P[13] = { x:cx+0.175*w,  y:0.29 + 0.14*(1-armUp*0.7), z:0, visibility:.93 };
@@ -52,10 +58,12 @@ function pose(){
    il est petit plus le point est proche de la caméra. */
 function world(){
   const th = currentYaw() * Math.PI / 180, r = 0.18;
+  // __invertZ simule un appareil dont la profondeur est de signe opposé
+  const k = (typeof window !== 'undefined' && window.__invertZ) ? -1 : 1;
   return [
     ...new Array(11).fill({ x:0, y:0, z:0, visibility:.9 }),
-    { x: r*Math.cos(th), y:0, z: r*Math.sin(th), visibility:.95 },  // épaule gauche
-    { x:-r*Math.cos(th), y:0, z:-r*Math.sin(th), visibility:.95 },  // épaule droite
+    { x: k*r*Math.cos(th), y:0, z: k*r*Math.sin(th), visibility:.95 },  // épaule gauche
+    { x:-k*r*Math.cos(th), y:0, z:-k*r*Math.sin(th), visibility:.95 },  // épaule droite
     ...new Array(21).fill({ x:0, y:0, z:0, visibility:.9 })
   ];
 }
