@@ -92,6 +92,12 @@
     border:none;border-radius:50%;cursor:pointer}
   input[type=range]:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 3px rgba(200,164,92,.35)}
 
+  .seg{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}
+  .seg button{padding:9px;background:transparent;color:var(--paper);border:1px solid var(--line);
+    cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:10px;
+    letter-spacing:.1em;text-transform:uppercase}
+  .seg button[aria-pressed=true]{border-color:var(--brass);color:var(--brass)}
+
   .swatches{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
   .sw{width:30px;height:30px;border:1px solid var(--line);cursor:pointer;padding:0}
   .sw[aria-pressed=true]{outline:2px solid var(--brass);outline-offset:2px}
@@ -123,7 +129,7 @@
 
 <header>
   <h1>Cabine</h1>
-  <div class="sub">essayage virtuel · v20 · app</div>
+  <div class="sub">essayage virtuel · v21</div>
   <div class="status" id="status">En attente</div>
 </header>
 
@@ -202,6 +208,26 @@
 
     <button class="act primary" id="btnShot">Enregistrer l'image</button>
     <button class="act" id="btn3d">Créer l'avatar 3D</button>
+
+    <h2>Taille conseillée</h2>
+    <div class="field">
+      <label for="hCm">Votre taille <span id="vHCm">175 cm</span></label>
+      <input type="range" id="hCm" min="140" max="210" step="1" value="175">
+    </div>
+    <div class="seg" id="morpho">
+      <button data-m="h" aria-pressed="true">Homme</button>
+      <button data-m="f" aria-pressed="false">Femme</button>
+    </div>
+    <button class="act" id="btnMeasure">Mesurer pendant 3 s</button>
+    <div class="measures" style="margin-top:4px">
+      <div class="row"><span class="k">Échelle</span><span class="v" id="mScale">—</span></div>
+      <div class="row"><span class="k">Carrure</span><span class="v" id="mShCm">—</span></div>
+      <div class="row"><span class="k">Tour de poitrine</span><span class="v" id="mChest">—</span></div>
+      <div class="row"><span class="k">Taille conseillée</span><span class="v" id="mSize">—</span></div>
+    </div>
+    <p class="note" style="margin-top:10px" id="sizeNote">Placez-vous de face, en pied,
+    chevilles visibles. Sans les chevilles, l'échelle est déduite de proportions moyennes
+    et le résultat perd en fiabilité.</p>
 
     <h2>Partage</h2>
     <button class="act" id="btnShare">Partager la cabine</button>
@@ -679,6 +705,73 @@ try{
   if(saved) loadViews(JSON.parse(saved));
 }catch(e){ /* rien de sauvegardé */ }
 
+/* ---------------------------------------------------------------
+   Mesure et taille conseillée. Les repères donnent des pixels ; la
+   taille saisie fournit l'échelle. Sans les chevilles, on retombe
+   sur un rapport carrure/stature moyen, nettement moins fiable.
+   --------------------------------------------------------------- */
+let morpho = 'h';
+let measuring = null;          // { t0, samples:[] }
+
+for(const b of document.querySelectorAll('#morpho button')){
+  b.onclick = ()=>{
+    morpho = b.dataset.m;
+    for(const o of document.querySelectorAll('#morpho button'))
+      o.setAttribute('aria-pressed', o === b ? 'true' : 'false');
+  };
+}
+$('hCm').oninput = ()=> $('vHCm').textContent = $('hCm').value + ' cm';
+
+$('btnMeasure').onclick = ()=>{
+  if(!video){ statusEl.textContent = 'Ouvrez la caméra d\u2019abord'; return; }
+  measuring = { t0: performance.now(), samples: [] };
+  hint.textContent = 'Mesure en cours, tenez-vous droit';
+  hint.style.opacity = '1';
+};
+
+// barèmes usuels, en tour de poitrine (cm)
+const CHART = {
+  h: [['XS',0,88],['S',88,94],['M',94,100],['L',100,108],['XL',108,116],['XXL',116,999]],
+  f: [['XS',0,82],['S',82,86],['M',86,92],['L',92,98],['XL',98,106],['XXL',106,999]]
+};
+const FR = { h:{XS:42,S:44,M:48,L:50,XL:54,XXL:58}, f:{XS:34,S:36,M:38,L:40,XL:44,XXL:48} };
+
+const median = a => { const b=[...a].sort((x,y)=>x-y); return b[b.length>>1]; };
+
+function finishMeasure(){
+  const S = measuring.samples;
+  measuring = null;
+  hint.textContent = 'Reculez pour cadrer épaules et hanches';
+  if(S.length < 8){ statusEl.textContent = 'Mesure trop courte'; return; }
+
+  const H = +$('hCm').value;
+  const full = S.filter(s => s.stature > 0);
+  let scale, sure;
+  if(full.length > S.length*0.5){
+    scale = H / median(full.map(s => s.stature));       // cm par pixel
+    sure = true;
+  }else{
+    // rapport carrure sur stature moyen chez l'adulte
+    const k = morpho === 'h' ? 0.245 : 0.230;
+    scale = (k*H) / median(S.map(s => s.sh));
+    sure = false;
+  }
+
+  const shCm = median(S.map(s => s.sh)) * scale;
+  // le tour de poitrine se régresse sur la largeur biacromiale
+  const chest = shCm * 2.15 + (morpho === 'h' ? 2 : 4);
+
+  const row = CHART[morpho].find(r => chest >= r[1] && chest < r[2]) || CHART[morpho][2];
+  $('mScale').textContent = sure ? 'chevilles vues' : 'estimée';
+  $('mShCm').textContent  = shCm.toFixed(1) + ' cm';
+  $('mChest').textContent = Math.round(chest-4) + '–' + Math.round(chest+4) + ' cm';
+  $('mSize').textContent  = row[0] + ' · ' + FR[morpho][row[0]];
+  $('sizeNote').innerHTML = sure
+    ? 'Mesure d\u2019après votre stature. <b>Comptez une taille d\u2019écart possible</b> selon la coupe du vêtement.'
+    : 'Chevilles hors cadre : échelle déduite de proportions moyennes. <b>Refaites-la en pied</b> pour un résultat fiable.';
+  statusEl.textContent = 'En direct';
+}
+
 const cfg = { width:1.05, length:1.25, offset:0.02, shade:0.7, smooth:0.45, opacity:1 };
 const bind = (id,key,fmt)=>{
   const el = $(id), out = $('v'+id.slice(1));
@@ -790,6 +883,14 @@ function loop(){
     const tilt = Math.atan2(hm.y-sm.y, hm.x-sm.x) - Math.PI/2;
     const conf = Math.min(P[11].v,P[12].v,P[23].v,P[24].v);
     const cropped = hm.y > H*0.95 || torsoRaw > shoulderW*1.9;
+
+    if(measuring){
+      // stature en pixels : du nez aux chevilles vaut 0,891 de la hauteur totale
+      const ank = (P[27].v > 0.5 && P[28].v > 0.5) ? (P[27].y + P[28].y)/2 : 0;
+      const stature = (ank && P[0].v > 0.5) ? (ank - P[0].y)/0.891 : 0;
+      if(conf > 0.6) measuring.samples.push({ sh:shoulderW, stature });
+      if(performance.now() - measuring.t0 > 3000) finishMeasure();
+    }
 
     // rotation du buste. Le modèle sait de quel côté est votre épaule gauche :
     // si elle apparaît à gauche de l'écran miroir, vous êtes face à la caméra.
