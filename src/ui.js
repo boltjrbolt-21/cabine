@@ -257,7 +257,7 @@ for(const r of els('input[type=range]')){
 }
 
 const DEFAULTS = { sWidth:1.05, sLength:1.25, sOffset:0.02,
-                   sShade:0.7, sSmooth:0.45, sOpacity:1, sFit:0.85 };
+                   sShade:0.7, sSmooth:0.45, sOpacity:1, sFit:0.85, sMould:0.55 };
 el('#adjReset').onclick = ()=>{
   for(const [id,v] of Object.entries(DEFAULTS)){
     const r = el('#'+id);

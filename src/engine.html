@@ -957,7 +957,7 @@ function finishMeasure(){
 }
 
 const cfg = { width:1.05, length:1.25, offset:0.02, shade:0.7, smooth:0.45,
-              opacity:1, fit:0.85 };
+              opacity:1, fit:0.85, mould:0.55 };
 const bind = (id,key,fmt)=>{
   const el = $(id), out = $('v'+id.slice(1));
   el.oninput = ()=>{ cfg[key] = +el.value; out.textContent = fmt(+el.value); };
@@ -1003,6 +1003,35 @@ let maskImg = null, mask32 = null, maskReady = false, maskDirty = false, segFram
 const silCv = document.createElement('canvas'), silCtx = silCv.getContext('2d');
 const skinCv = document.createElement('canvas'), skinCtx = skinCv.getContext('2d');
 let silImg = null, skinImg = null, sil32 = null, skin32 = null;
+
+/* Largeur du buste, ligne par ligne.
+   Le vêtement était plaqué sur un quadrilatère : il ne se resserrait pas à
+   la taille et ne s'élargissait pas aux hanches, quel que soit le corps.
+   Le masque de segmentation contient pourtant cette forme. On en extrait,
+   pour chaque ligne, la plus large plage continue de « vêtement » — les
+   bras nus sont de la peau, ils en sont donc naturellement exclus, et un
+   bras écarté ne vient pas étirer le tissu jusqu'à lui. */
+let runL = null, runR = null, runH = 0, maskW = 0, maskH = 0;
+
+function buildTorsoRuns(mw, mh, arr){
+  if(!runL || runH !== mh){ runL = new Int16Array(mh); runR = new Int16Array(mh); runH = mh; }
+  maskW = mw; maskH = mh;
+  for(let y=0;y<mh;y++){
+    const row = y*mw;
+    let bestL = -1, bestR = -1, bestW = 0, curL = -1;
+    for(let x=0;x<=mw;x++){
+      const c = x < mw ? arr[row+x] : 0;
+      const isTorso = (c === 4 || c === 5);          // vêtements, accessoires
+      if(isTorso){ if(curL < 0) curL = x; }
+      else if(curL >= 0){
+        const wid = x - curL;
+        if(wid > bestW){ bestW = wid; bestL = curL; bestR = x-1; }
+        curL = -1;
+      }
+    }
+    runL[y] = bestL; runR[y] = bestR;
+  }
+}
 
 function buildCpuMasks(mw, mh, arr){
   if(silCv.width !== mw || silCv.height !== mh){
@@ -1366,7 +1395,7 @@ function loop(){
       const occOn = !!(segmenter && elOcclusion.checked);
       // la seconde peau réclame le même masque : on le calcule si l'une
       // ou l'autre en a besoin, jamais deux fois
-      const fitOn = !!(segmenter && cfg.fit > 0.01);
+      const fitOn = !!(segmenter && (cfg.fit > 0.01 || cfg.mould > 0.01));
       if(occOn || fitOn){
         try{
           if(segFrame++ % segEvery === 0){
@@ -1397,6 +1426,7 @@ function loop(){
               const skin   = c<=3 && c>0 ? 0x0000FF00 : 0;   // vert   : peau nue
               mask32[i] = 0xFF000000 | skin | person;
             }
+            buildTorsoRuns(mw, mh, arr);
             if(!MESH_OK) buildCpuMasks(mw, mh, arr);
             mctx.putImageData(maskImg,0,0);
             cm.close();
@@ -1415,7 +1445,8 @@ function loop(){
       if(MESH_OK){
         // tissu, éclairage et occlusion en une seule passe sur la carte graphique
         warpRender(G, gw, gh, mT, bones, W, H, cfg.shade, occOn && maskReady,
-                   alpha, (fitOn && maskReady) ? cfg.fit : 0);
+                   alpha, (fitOn && maskReady) ? cfg.fit : 0,
+                   maskReady ? cfg.mould : 0);
         ctx.drawImage(warpCv, 0, 0);
       }else{
         const put = c => {
@@ -1510,7 +1541,29 @@ function loop(){
 const warpCv = document.createElement('canvas');
 const GX = 22, GY = 28;
 let glProg = null, glPos = null, glUV = null, glIdx = null;
-let uvArr = null, posArr = null, alphaArr = null, idxCount = 0;
+let uvArr = null, posArr = null, alphaArr = null, usedArr = null, idxCount = 0;
+// profil du buste, une valeur par ligne de la grille
+const rowRatio = new Float32Array(GY+1), rowCx = new Float32Array(GY+1),
+      rowMid  = new Float32Array(GY+1), sortBuf = new Float32Array(GY+1);
+
+/* Comble les lignes sans mesure par la plus proche valide, puis lisse.
+   Sans le comblement la maille se déchire ; sans le lissage, le moindre
+   tremblement de la segmentation fait onduler le vêtement. */
+function fillSmooth(a, n){
+  let last = NaN;
+  for(let i=0;i<n;i++){ if(isFinite(a[i])) last = a[i]; else if(isFinite(last)) a[i] = last; }
+  last = NaN;
+  for(let i=n-1;i>=0;i--){ if(isFinite(a[i])) last = a[i]; else if(isFinite(last)) a[i] = last; }
+  for(let pass=0; pass<2; pass++){
+    let prev = a[0];
+    for(let i=1;i<n-1;i++){
+      const cur = a[i];
+      if(isFinite(prev) && isFinite(cur) && isFinite(a[i+1]))
+        a[i] = (prev + 2*cur + a[i+1])/4;
+      prev = cur;
+    }
+  }
+}
 let glA = null, texShade = null, texMask = null;
 let U = null, At = null;              // emplacements, résolus une seule fois
 let maskTexW = 0, maskTexH = 0;
@@ -1601,6 +1654,7 @@ function initGL(){
   idxCount = idx.length;
 
   alphaArr = new Float32Array(uv.length/2);
+  usedArr  = new Float32Array(uv.length/2);
 
   texShade = gl.createTexture();
   texMask  = gl.createTexture();
@@ -1680,7 +1734,7 @@ function distSeg(x,y, ax,ay, bx,by){
   return Math.sqrt(dx*dx + dy*dy);
 }
 
-function warpRender(G, gw, gh, mT, bones, W, H, shadeAmt, occ, alpha, fit){
+function warpRender(G, gw, gh, mT, bones, W, H, shadeAmt, occ, alpha, fit, mould){
   if(warpCv.width !== W || warpCv.height !== H){ warpCv.width = W; warpCv.height = H; }
 
   // On sort les coefficients de la matrice du torse de la boucle : lire six
@@ -1708,6 +1762,82 @@ function warpRender(G, gw, gh, mT, bones, W, H, shadeAmt, occ, alpha, fit){
       sum += wt;
     }
     posArr[k] = dx/sum; posArr[k+1] = dy/sum;
+    usedArr[k>>1] = used < 1 ? used : 1;
+  }
+
+  /* Moulage. Chaque ligne de la grille est ramenée sur la largeur réelle du
+     buste à cette hauteur : le vêtement se resserre à la taille et s'élargit
+     aux hanches au lieu de rester un trapèze.
+
+     Le profil est d'abord relevé pour toutes les lignes, puis comblé et
+     lissé, et seulement ensuite appliqué. Traiter chaque ligne isolément
+     déchirait la maille : là où la segmentation ne donnait rien, la ligne
+     restait sur place pendant que ses voisines se resserraient. */
+  if(mould > 0.001 && runL && maskH){
+    const row = GX+1;
+    for(let j=0;j<=GY;j++){
+      const base = j*row;
+      let sy = 0, x0 = Infinity, x1 = -Infinity;
+      for(let i=0;i<row;i++){
+        const kk = (base+i)*2;
+        sy += posArr[kk+1];
+        const x = posArr[kk];
+        if(x < x0) x0 = x;
+        if(x > x1) x1 = x;
+      }
+      rowMid[j] = (x0+x1)/2;
+      const span = x1 - x0;
+      const my = (sy/row/H*maskH)|0;
+      let ratio = NaN, cx = NaN;
+      if(my >= 0 && my < maskH && span > 4){
+        const l = runL[my], r = runR[my];
+        if(l >= 0 && r - l >= 4){
+          // le masque n'est pas miroité, l'écran l'est : les bords s'échangent
+          const sxL = (1 - r/maskW)*W, sxR = (1 - l/maskW)*W;
+          ratio = (sxR - sxL)/span;
+          cx = (sxL + sxR)/2;
+        }
+      }
+      rowRatio[j] = ratio; rowCx[j] = cx;
+    }
+
+    /* Le rapport dépend d'abord de la taille de la photo du vêtement : une
+       image large demande un rapport bas sans que rien n'aille mal. Le
+       borner dans l'absolu écrasait donc la forme — toutes les lignes
+       butaient sur la même limite et le buste redevenait un rectangle.
+       On borne chaque ligne autour de la médiane : l'échelle d'ensemble
+       reste libre, seule une ligne isolée et absurde est ramenée. */
+    let nv = 0;
+    for(let j=0;j<=GY;j++) if(isFinite(rowRatio[j])) sortBuf[nv++] = rowRatio[j];
+    if(nv >= 3){
+      const view = sortBuf.subarray(0, nv);
+      Array.prototype.sort.call(view, (a,b)=>a-b);
+      const med = view[nv>>1];
+      const lo = med*0.62, hi = med*1.62;
+      for(let j=0;j<=GY;j++){
+        const v = rowRatio[j];
+        if(!isFinite(v)) continue;
+        rowRatio[j] = v < lo ? lo : v > hi ? hi : v;
+      }
+    }
+    fillSmooth(rowRatio, GY+1);
+    fillSmooth(rowCx, GY+1);
+
+    for(let j=0;j<=GY;j++){
+      let ratio = rowRatio[j];
+      const cx = rowCx[j];
+      if(!isFinite(ratio) || !isFinite(cx)) continue;
+      // dernière sécurité : au-delà, plus rien de ce qui reste n'est du tissu
+      if(ratio < 0.2) ratio = 0.2; else if(ratio > 3) ratio = 3;
+      const base = j*row, mid = rowMid[j];
+      for(let i=0;i<row;i++){
+        const v = base+i, kk = v*2;
+        const wgt = mould * (1 - usedArr[v]);
+        if(wgt < 0.002) continue;
+        const target = cx + (posArr[kk] - mid)*ratio;
+        posArr[kk] += (target - posArr[kk])*wgt;
+      }
+    }
   }
 
   // une maille trop étirée n'est plus du tissu : on l'efface au lieu de la filer

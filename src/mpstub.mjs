@@ -86,7 +86,13 @@ function mask(w, h){
   for(let y=0;y<h;y++) for(let x=0;x<w;x++){
     const nx = x/w, ny = y/h;
     const face  = ((nx-0.5)**2)/0.0045 + ((ny-0.13)**2)/0.004 < 1;
-    const torso = nx > 0.33 && nx < 0.67 && ny > 0.26 && ny < 0.70;
+    /* Buste en sablier : large aux épaules, resserré à la taille, élargi
+       aux hanches. C'est cette variation que le moulage doit suivre ; un
+       rectangle ne prouverait rien. */
+    const t = (ny - 0.26) / 0.44;
+    const halfW = ny > 0.26 && ny < 0.70
+      ? 0.17 - 0.075*Math.sin(Math.min(1,Math.max(0,t))*Math.PI) : 0;
+    const torso = halfW > 0 && Math.abs(nx - 0.5) < halfW;
     const arms  = (nx > 0.22 && nx < 0.36 || nx > 0.64 && nx < 0.78)
                   && ny > 0.28 && ny < 0.62;
     const legs  = nx > 0.36 && nx < 0.64 && ny >= 0.70 && ny < 0.97;
