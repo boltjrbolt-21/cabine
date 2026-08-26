@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calculer la date limite de validation du VLS-TS, de la CVEC et de l'APL</title>
+<meta name="description" content="Étudiant international en France : calculez en dix secondes vos trois dates butoirs — validation du VLS-TS dans les 3 mois, CVEC avant l'inscription, demande d'APL non rétroactive. Gratuit, sans inscription, rien ne quitte votre navigateur.">
+<link rel="canonical" href="https://boltjrbolt-21.github.io/cabine/horloges/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Vos trois échéances d'arrivée en France, calculées">
+<meta property="og:description" content="Trois échéances décident de votre première année en France. Deux ne se rattrapent jamais. Calculez les vôtres, gratuitement.">
+<meta property="og:url" content="https://boltjrbolt-21.github.io/cabine/horloges/">
+<meta name="robots" content="index, follow">
+<style>
+:root{
+  --papier:#F6F5F2; --encre:#101214; --encre-2:#3E4448; --encre-3:#6B7378;
+  --trait:#DDD9D2; --trait-fort:#C3BDB3; --carte:#FFFFFF;
+  --vert:#00A263; --vert-fonce:#00794A; --vert-clair:#E6F5EE;
+  --rouge:#C6362F; --rouge-clair:#FBEAE8;
+  --ambre:#B26A00; --ambre-clair:#FDF1DF;
+  --r:10px;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--papier);color:var(--encre);
+  font:16px/1.65 "Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif}
+.wrap{max-width:880px;margin:0 auto;padding:0 20px}
+h1,h2,h3{line-height:1.25;margin:0 0 .45em;font-weight:650;letter-spacing:-.015em}
+h1{font-size:2.05rem;max-width:20ch}
+h2{font-size:1.3rem}
+h3{font-size:1rem}
+p{margin:0 0 .95em}
+a{color:var(--vert-fonce);text-underline-offset:3px}
+small{color:var(--encre-3)}
+
+header.top{background:var(--carte);border-bottom:1px solid var(--trait)}
+header.top .wrap{padding:34px 20px 30px}
+.fil{font-size:.76rem;text-transform:uppercase;letter-spacing:.1em;color:var(--encre-3);margin:0 0 16px}
+header.top p.chapo{max-width:60ch;color:var(--encre-2);font-size:1.05rem;margin:0}
+
+main .wrap{padding-top:32px;padding-bottom:20px}
+section{margin:0 0 40px}
+.carte{background:var(--carte);border:1px solid var(--trait);border-radius:var(--r);padding:22px}
+
+.grille{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:16px}
+label.champ{display:block}
+label.champ > span,.champ > span{display:block;font-size:.85rem;font-weight:600;margin-bottom:5px}
+label.champ small{display:block;font-weight:400;color:var(--encre-3);margin-top:4px;line-height:1.4}
+input[type=date]{width:100%;padding:9px 11px;border:1px solid var(--trait-fort);border-radius:7px;
+  background:var(--papier);color:var(--encre);font:inherit;font-size:.95rem}
+input:focus{outline:2px solid var(--vert);outline-offset:1px;border-color:var(--vert)}
+.radios{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+.radios label{position:relative;border:1px solid var(--trait-fort);border-radius:99px;padding:6px 13px;
+  font-size:.88rem;cursor:pointer;background:var(--papier);user-select:none}
+.radios input{position:absolute;opacity:0;pointer-events:none}
+.radios label.actif{background:var(--encre);color:var(--papier);border-color:var(--encre)}
+button{font:inherit;font-weight:600;cursor:pointer;border-radius:7px;padding:11px 20px;
+  border:1px solid var(--encre);background:var(--encre);color:var(--papier)}
+button.secondaire{background:transparent;color:var(--encre)}
+button:hover{opacity:.88}
+.actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px;align-items:center}
+
+.horloges{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+.horloge{border:1px solid var(--trait);border-left:5px solid var(--encre-3);border-radius:var(--r);
+  background:var(--carte);padding:18px}
+.horloge h3{margin:0 0 2px;font-size:.95rem}
+.horloge .date{font-size:1.4rem;font-weight:700;letter-spacing:-.02em;margin:6px 0 2px}
+.horloge .reste{font-size:.85rem;font-weight:650}
+.horloge p{font-size:.85rem;color:var(--encre-2);margin:10px 0 0}
+.horloge.danger{border-left-color:var(--rouge);background:var(--rouge-clair)}
+.horloge.danger .reste{color:var(--rouge)}
+.horloge.alerte{border-left-color:var(--ambre);background:var(--ambre-clair)}
+.horloge.alerte .reste{color:var(--ambre)}
+.horloge.ok{border-left-color:var(--vert);background:var(--vert-clair)}
+.horloge.ok .reste{color:var(--vert-fonce)}
+
+.explique{border-top:1px solid var(--trait);padding-top:26px}
+.explique h2{margin-bottom:.6em}
+.bloc{border-left:3px solid var(--trait-fort);padding-left:18px;margin:0 0 26px}
+.bloc h3{margin-bottom:.35em}
+.bloc p{font-size:.95rem;color:var(--encre-2);margin-bottom:.6em}
+.bloc p:last-child{margin-bottom:0}
+.bloc b{color:var(--encre)}
+.bloc.dur{border-left-color:var(--rouge)}
+.bloc.sous{border-left-color:var(--ambre)}
+.bloc.sous2{border-left-color:var(--vert)}
+
+.faq details{border-top:1px solid var(--trait);padding:14px 0}
+.faq details:first-of-type{border-top:0}
+.faq summary{cursor:pointer;font-weight:600;font-size:.98rem;list-style:none}
+.faq summary::-webkit-details-marker{display:none}
+.faq summary::before{content:"+ ";color:var(--vert-fonce);font-weight:700}
+.faq details[open] summary::before{content:"− "}
+.faq p{font-size:.94rem;color:var(--encre-2);margin:10px 0 0}
+
+.kit{background:var(--encre);color:var(--papier);border-radius:var(--r);padding:26px}
+.kit h2{color:#fff;margin-bottom:.5em}
+.kit p{color:#C9CDD0;font-size:.96rem;max-width:58ch}
+.kit ul{margin:0 0 18px;padding-left:20px;color:#C9CDD0;font-size:.94rem}
+.kit li{margin-bottom:5px}
+.kit .bientot{display:inline-block;font-size:.8rem;font-weight:700;text-transform:uppercase;
+  letter-spacing:.08em;background:rgba(255,255,255,.12);padding:6px 13px;border-radius:99px}
+
+.vide{color:var(--encre-3);font-size:.93rem;text-align:center;padding:22px 10px}
+.masque{display:none}
+footer{border-top:1px solid var(--trait);margin-top:20px;padding:24px 0 60px;font-size:.83rem;color:var(--encre-3)}
+footer p{margin:0 0 .6em;max-width:75ch}
+
+@media (max-width:640px){ h1{font-size:1.6rem} }
+@media print{ .no-print{display:none!important} body{background:#fff} }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <p class="fil">Étudiant international en France</p>
+    <h1>Vos trois échéances, calculées à la date près</h1>
+    <p class="chapo">Trois horloges se déclenchent le jour où vous posez le pied en France. Deux d'entre
+    elles ne se rattrapent jamais, et personne ne vous préviendra qu'elles tournent. Entrez vos dates :
+    le calcul est immédiat, gratuit, sans inscription, et rien ne quitte votre navigateur.</p>
+  </div>
+</header>
+
+<main>
+<div class="wrap">
+
+  <section class="no-print">
+    <div class="carte">
+      <div class="grille">
+        <label class="champ">
+          <span>Date d'entrée dans l'espace Schengen</span>
+          <input type="date" id="f-entree">
+          <small>Le tampon sur votre passeport, pas votre arrivée dans la ville d'études.</small>
+        </label>
+        <label class="champ">
+          <span>Entrée dans le logement</span>
+          <input type="date" id="f-logement">
+          <small>Date réelle ou prévue de remise des clés.</small>
+        </label>
+        <label class="champ">
+          <span>Inscription administrative</span>
+          <input type="date" id="f-rentree">
+          <small>Même approximative.</small>
+        </label>
+      </div>
+      <div class="grille" style="margin-top:18px">
+        <div class="champ">
+          <span>Type de visa</span>
+          <div class="radios">
+            <label><input type="radio" name="visa" value="vlsts" checked>VLS-TS étudiant</label>
+            <label><input type="radio" name="visa" value="vlst">VLS-T (≤ 6 mois)</label>
+            <label><input type="radio" name="visa" value="ue">UE / EEE / Suisse</label>
+          </div>
+        </div>
+        <div class="champ">
+          <span>Boursier du gouvernement français</span>
+          <div class="radios">
+            <label><input type="radio" name="boursier" value="non" checked>Non</label>
+            <label><input type="radio" name="boursier" value="oui">Oui</label>
+          </div>
+        </div>
+      </div>
+      <div class="actions">
+        <button id="btn-calc">Calculer mes échéances</button>
+        <button class="secondaire" id="btn-print">Imprimer</button>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div id="zone-horloges" class="horloges"></div>
+    <div id="attente" class="carte vide">Renseignez au moins votre date d'entrée en France, puis lancez le calcul.</div>
+  </section>
+
+  <section class="kit no-print">
+    <h2>Et ensuite ?</h2>
+    <p>Connaître ses dates est le premier pas. Le suivant, c'est de savoir dans quel ordre agir — parce
+    que les démarches s'appellent les unes les autres&nbsp;: pour louer il faut un compte en banque, pour
+    ouvrir un compte il faut un justificatif de domicile, et pour un justificatif de domicile il faut un
+    logement. Le <b>Kit Installation France</b> sort de ce cercle&nbsp;:</p>
+    <ul>
+      <li>votre plan d'action daté, trié, avec les pièces exigées à chaque étape&nbsp;;</li>
+      <li>l'ordre de sortie du nœud logement / banque / domicile, adapté à votre situation&nbsp;;</li>
+      <li>six courriers prêts à envoyer — dont celui qui demande l'exonération des droits d'inscription,
+      là où l'écart se compte en milliers d'euros&nbsp;;</li>
+      <li>la liste des pièces à réunir, cochable, qui vous suit toute l'année.</li>
+    </ul>
+    <span class="bientot">Bientôt disponible</span>
+    <!-- Coller ici le lien de la page de vente une fois la boutique ouverte, à la place du <span> ci-dessus :
+         <a href="URL" style="...">Obtenir le kit</a> -->
+  </section>
+
+  <section class="explique">
+    <h2>Pourquoi ces trois dates, et pas d'autres</h2>
+
+    <div class="bloc dur">
+      <h3>1. La validation du VLS-TS — trois mois, pas un jour de plus</h3>
+      <p>Un visa long séjour valant titre de séjour doit être <b>validé en ligne dans les trois mois
+      suivant l'entrée en France</b>. Tant qu'il ne l'est pas, il ne vaut pas titre de séjour&nbsp;: vous
+      ne pouvez ni justifier de la régularité de votre séjour, ni sortir de France et y revenir.</p>
+      <p>Le piège vient de la date de départ. Elle court à partir de votre <b>entrée dans l'espace
+      Schengen</b>, pas de votre arrivée dans votre ville d'études. Si vous êtes entré par Amsterdam ou
+      Madrid avec quelques jours de tourisme avant de rejoindre la France, votre compteur a démarré
+      là-bas — et votre échéance est plus proche que vous ne le pensez. Photographiez le tampon
+      d'entrée&nbsp;: c'est lui qui fait foi.</p>
+    </div>
+
+    <div class="bloc sous">
+      <h3>2. La CVEC — avant l'inscription, jamais après</h3>
+      <p>La contribution vie étudiante et de campus se règle, ou s'obtient à titre gratuit, <b>avant
+      l'inscription administrative</b>. L'établissement réclame l'attestation pour finaliser votre
+      dossier&nbsp;: sans elle, l'inscription reste bloquée, même si tout le reste est prêt.</p>
+      <p>Erreur la plus fréquente&nbsp;: croire qu'une bourse suffit à exonérer. Seule la bourse du
+      <b>gouvernement français</b> ouvre droit à l'exonération. Les boursiers d'un gouvernement étranger
+      ne sont en principe pas exonérés — et découvrent le problème le jour de l'inscription.</p>
+    </div>
+
+    <div class="bloc sous2">
+      <h3>3. L'aide au logement — chaque mois d'attente est perdu</h3>
+      <p>L'aide au logement <b>n'est pas rétroactive</b>. Le droit s'ouvre le mois qui suit le dépôt de
+      la demande, pas votre emménagement. Attendre deux mois d'avoir « toutes les pièces », c'est perdre
+      deux mois d'aide, définitivement, sans recours possible.</p>
+      <p>La bonne pratique est contre-intuitive&nbsp;: <b>déposez le dossier même incomplet</b>, dès
+      l'entrée dans les lieux. Il se complète ensuite, et c'est la date de dépôt qui compte. Le numéro
+      de sécurité sociale provisoire suffit pour démarrer. En colocation, chacun dépose sa propre
+      demande sur sa quote-part.</p>
+    </div>
+  </section>
+
+  <section class="faq">
+    <h2>Questions fréquentes</h2>
+    <details>
+      <summary>Quelle date dois-je vraiment prendre comme date d'entrée&nbsp;?</summary>
+      <p>Celle du tampon d'entrée dans l'espace Schengen apposé sur votre passeport. Si vous avez
+      transité par un autre pays de l'espace Schengen avant la France, c'est cette première date qui
+      compte, et non celle de votre arrivée dans votre ville d'études.</p>
+    </details>
+    <details>
+      <summary>J'ai dépassé les trois mois de validation, que faire&nbsp;?</summary>
+      <p>Ne restez pas sans agir et ne quittez pas le territoire avant d'avoir consulté. Cette situation
+      relève du droit des étrangers&nbsp;: adressez-vous à un avocat spécialisé, ou au service des
+      étrangers de votre préfecture. Cette page ne délivre pas de conseil juridique et ne peut pas
+      traiter un cas individuel.</p>
+    </details>
+    <details>
+      <summary>Quelle différence entre VLS-TS et VLS-T&nbsp;?</summary>
+      <p>Le VLS-TS vaut titre de séjour une fois validé, et se renouvelle. Le VLS-T, délivré pour six
+      mois au plus, ne se valide pas et ne se renouvelle pas&nbsp;: il prend fin à son échéance. La
+      mention exacte figure sur la vignette apposée dans votre passeport — vérifiez-la, la différence
+      change tout votre parcours.</p>
+    </details>
+    <details>
+      <summary>Dois-je attendre mon numéro de sécurité sociale définitif pour la CAF&nbsp;?</summary>
+      <p>Non. L'affiliation à la sécurité sociale prend souvent plusieurs semaines et le numéro
+      provisoire suffit pour engager la demande d'aide au logement. Attendre le numéro définitif, c'est
+      perdre des mois d'aide que rien ne rattrapera.</p>
+    </details>
+    <details>
+      <summary>Mes données sont-elles enregistrées quelque part&nbsp;?</summary>
+      <p>Non. Le calcul se fait entièrement dans votre navigateur. Aucune date, aucune information n'est
+      envoyée, ni stockée, ni transmise à qui que ce soit. Vous pouvez couper votre connexion internet,
+      la page continue de fonctionner.</p>
+    </details>
+  </section>
+
+</div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p><b>Information générale, pas conseil juridique.</b> Cette page ne constitue ni une consultation
+    juridique ni une assistance dans un dossier individuel, activités réservées par la loi n° 71-1130
+    du 31 décembre 1971. Pour un refus de visa, un refus de titre de séjour, un contentieux ou toute
+    situation irrégulière, consultez un avocat en droit des étrangers.</p>
+    <p><b>Les règles et les délais évoluent.</b> Vérifiez toujours votre situation sur les sites
+    officiels&nbsp;:
+    <a href="https://administration-etrangers-en-france.interieur.gouv.fr" target="_blank" rel="noopener">ANEF</a>,
+    <a href="https://cvec.etudiant.gouv.fr" target="_blank" rel="noopener">CVEC</a>,
+    <a href="https://www.caf.fr" target="_blank" rel="noopener">CAF</a>,
+    <a href="https://www.service-public.fr" target="_blank" rel="noopener">service-public.fr</a>.
+    Les délais de traitement des administrations ne sont jamais garantis.</p>
+  </div>
+</footer>
+
+<script>
+"use strict";
+var MOIS = ["janvier","février","mars","avril","mai","juin","juillet","août",
+            "septembre","octobre","novembre","décembre"];
+var DELAI_VALIDATION_MOIS = 3;
+
+function lire(id){ return document.getElementById(id); }
+function auj(){ var d = new Date(); d.setHours(0,0,0,0); return d; }
+function versDate(v){
+  if(!v) return null;
+  var p = v.split("-");
+  if(p.length !== 3) return null;
+  var d = new Date(+p[0], +p[1]-1, +p[2]);
+  return isNaN(d.getTime()) ? null : d;
+}
+function plusMois(d, n){
+  var r = new Date(d.getTime()), jour = r.getDate();
+  r.setDate(1); r.setMonth(r.getMonth() + n);
+  var dernier = new Date(r.getFullYear(), r.getMonth()+1, 0).getDate();
+  r.setDate(Math.min(jour, dernier));
+  return r;
+}
+function finDuMois(d){ return new Date(d.getFullYear(), d.getMonth()+1, 0); }
+function fmt(d){ return d.getDate() + " " + MOIS[d.getMonth()] + " " + d.getFullYear(); }
+function joursEntre(a,b){ return Math.round((b-a)/86400000); }
+function ech(t){ return String(t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+function radio(nom){
+  var e = document.querySelector('input[name="'+nom+'"]:checked');
+  return e ? e.value : null;
+}
+function niveau(j){
+  if(j === null) return "";
+  if(j < 0 || j <= 14) return "danger";
+  if(j <= 45) return "alerte";
+  return "ok";
+}
+function reste(j, motDepasse){
+  if(j < 0) return motDepasse + " depuis " + Math.abs(j) + " jour" + (Math.abs(j)>1?"s":"");
+  if(j === 0) return "C'est aujourd'hui";
+  return "Dans " + j + " jour" + (j>1?"s":"");
+}
+function majRadios(){
+  document.querySelectorAll(".radios label").forEach(function(l){
+    var i = l.querySelector("input");
+    l.classList.toggle("actif", !!(i && i.checked));
+  });
+}
+
+function calculer(){
+  var entree = versDate(lire("f-entree").value);
+  var logement = versDate(lire("f-logement").value);
+  var rentree = versDate(lire("f-rentree").value);
+  var visa = radio("visa"), boursier = radio("boursier");
+  var zone = lire("zone-horloges"), attente = lire("attente");
+
+  if(!entree){
+    zone.innerHTML = "";
+    attente.classList.remove("masque");
+    attente.textContent = "Il manque la date d'entrée dans l'espace Schengen : c'est elle qui commande toutes les autres.";
+    lire("f-entree").focus();
+    return;
+  }
+  attente.classList.add("masque");
+  var today = auj(), cartes = [];
+
+  if(visa === "vlsts"){
+    var butoir = plusMois(entree, DELAI_VALIDATION_MOIS), j = joursEntre(today, butoir);
+    cartes.push({cls:niveau(j), titre:"1. Validation du VLS-TS", date:fmt(butoir), reste:reste(j,"Dépassée"),
+      texte: j < 0
+        ? "Le délai de trois mois est passé. N'attendez pas et ne quittez pas la France avant d'avoir consulté un avocat en droit des étrangers ou le service des étrangers de votre préfecture."
+        : "À faire en ligne sur l'ANEF, avec un timbre fiscal électronique. Ne visez pas la date limite : faites-le dès que vous avez une adresse en France."});
+  } else if(visa === "vlst"){
+    cartes.push({cls:"alerte", titre:"1. Validation du VLS-TS", date:"Sans objet", reste:"Vous avez un VLS-T",
+      texte:"Un VLS-T ne se valide pas et ne se renouvelle pas : il prend fin à son échéance. Vérifiez la mention exacte portée sur votre vignette, la différence avec un VLS-TS change tout."});
+  } else {
+    cartes.push({cls:"ok", titre:"1. Validation du VLS-TS", date:"Sans objet", reste:"Ressortissant UE / EEE / Suisse",
+      texte:"Aucun titre de séjour n'est exigé. Les deux autres échéances vous concernent en revanche pleinement, ainsi que l'affiliation à la sécurité sociale."});
+  }
+
+  if(rentree){
+    var j2 = joursEntre(today, rentree);
+    cartes.push({cls:niveau(j2), titre:"2. CVEC", date:"Avant le " + fmt(rentree), reste:reste(j2,"Rentrée passée"),
+      texte:(boursier === "oui"
+        ? "Boursier du gouvernement français : vous êtes en principe exonéré du paiement, mais l'attestation reste obligatoire — demandez-la à 0 €."
+        : "À régler avant l'inscription administrative. ") +
+        " Sans l'attestation, l'établissement ne peut pas finaliser votre inscription."});
+  }
+
+  if(logement){
+    var ouverture = finDuMois(logement), j3 = joursEntre(today, ouverture), perdus = 0;
+    if(today > ouverture){
+      perdus = (today.getFullYear()-logement.getFullYear())*12 + (today.getMonth()-logement.getMonth());
+    }
+    cartes.push({cls: perdus > 0 ? "danger" : niveau(j3), titre:"3. Demande d'aide au logement",
+      date:"Déposer avant le " + fmt(ouverture),
+      reste: perdus > 0 ? perdus + " mois d'aide déjà perdu" + (perdus>1?"s":"") : reste(j3,"Fin de mois passée"),
+      texte:"L'aide n'est jamais rétroactive : le droit s'ouvre le mois suivant votre demande, pas votre emménagement. Déposez le dossier même incomplet, il se complète ensuite."});
+  }
+
+  zone.innerHTML = "";
+  cartes.forEach(function(c){
+    var d = document.createElement("div");
+    d.className = "horloge " + c.cls;
+    d.innerHTML = "<h3>"+ech(c.titre)+"</h3><div class=\"date\">"+ech(c.date)+
+                  "</div><div class=\"reste\">"+ech(c.reste)+"</div><p>"+ech(c.texte)+"</p>";
+    zone.appendChild(d);
+  });
+
+  if(!logement || !rentree){
+    var note = document.createElement("div");
+    note.className = "horloge";
+    note.innerHTML = "<h3>Il manque une date</h3><p>Renseignez " +
+      (!logement ? "votre entrée dans le logement" : "") +
+      (!logement && !rentree ? " et " : "") +
+      (!rentree ? "votre date d'inscription" : "") +
+      " pour afficher " + (!logement && !rentree ? "les deux autres horloges" : "l'horloge manquante") + ".</p>";
+    zone.appendChild(note);
+  }
+}
+
+document.addEventListener("DOMContentLoaded", function(){
+  majRadios();
+  document.querySelectorAll(".radios input").forEach(function(i){
+    i.addEventListener("change", function(){ majRadios(); if(lire("f-entree").value) calculer(); });
+  });
+  lire("btn-calc").addEventListener("click", calculer);
+  lire("btn-print").addEventListener("click", function(){ window.print(); });
+  ["f-entree","f-logement","f-rentree"].forEach(function(id){
+    lire(id).addEventListener("change", function(){ if(lire("f-entree").value) calculer(); });
+  });
+});
+</script>
+</body>
+</html>
