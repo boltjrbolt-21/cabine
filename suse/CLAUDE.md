@@ -4,7 +4,9 @@ PWA statique (HTML/CSS/JS vanilla, aucune dépendance, aucun build) pour chiffre
 et les afficher en signes inspirés de l'écriture proto-élamite (tablettes de Suse, ~3100 av. J.-C.).
 
 ## Fichiers
-- `index.html` — toute l'appli (UI + logique). Onglets Graver / Lire.
+- `index.html` — toute l'appli (UI + logique). Vues : accueil (liste des conversations), conversation
+  (fil de bulles), formulaire (création / changement de mot de passe), déverrouillage, et
+  « sans conversation » (anciens onglets Graver / Lire).
 - `manifest.json`, `sw.js` — installation PWA et cache hors ligne (incrémenter `CACHE` dans sw.js à chaque modif).
 - `icon-180/192/512.png` — icônes (glyphe hexagone barré, lapis sur argile).
 
@@ -16,10 +18,21 @@ et les afficher en signes inspirés de l'écriture proto-élamite (tablettes de 
 - Les dessins SVG des signes sont dans le tableau `G` (même ordre), viewBox 0 0 40 56.
 - Affichage de droite à gauche (`flex-direction: row-reverse`), comme les tablettes.
 
+## Conversations (stockage local)
+- localStorage `suse-convs` : `[{id, name, salt, data, updated, pw?}]`.
+- `data` = base64 de `[iv 12][historique JSON chiffré AES-256-GCM]`, clé PBKDF2 (310 000 it.) depuis le
+  mot de passe de la conversation et `salt`. Historique : `[{me, t, text, code}]` (`code` = la tablette).
+- Le nom et la date de la conversation sont en clair ; le contenu jamais.
+- `pw` n'existe que si l'utilisateur a coché « Mémoriser ».
+- Les tablettes restent transportées à la main (WhatsApp, SMS…) : graver copie, « Coller » ou un
+  collage dans le champ de message ajoute un message reçu (doublons ignorés via `code`).
+- La clé de la tablette suivante est dérivée à l'avance (`prep`) pour que copie et partage gardent le
+  geste utilisateur exigé par Safari.
+
 ## Contraintes
 - Web Crypto exige HTTPS (ou localhost). Tester avec `npx serve .` ou `python3 -m http.server`.
 - Rien ne doit partir vers un serveur : tout reste dans le navigateur.
-- Mot de passe mémorisé seulement si l'utilisateur coche l'option (localStorage `suse-pw`).
+- Mot de passe mémorisé seulement si l'utilisateur coche l'option (localStorage `suse-pw` en mode sans conversation, champ `pw` d'une conversation).
 - Langue de l'interface : français.
 
 ## Hébergement

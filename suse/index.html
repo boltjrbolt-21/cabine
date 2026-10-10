@@ -24,12 +24,17 @@
   --bg:#17140f; --clay:#2b251c; --clay-edge:#3d3427; --ink:#ece3d2; --muted:#a8997f;
   --lapis:#8fa8e8; --lapis-soft:#1e2740; --field:#211c15; --line:#3f3628; --ok:#7cc48a; --err:#ef8a7c; color-scheme:dark}}
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 html,body{margin:0;height:100%}
 body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.45;
   padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);-webkit-tap-highlight-color:transparent}
-.app{max-width:560px;margin:0 auto;padding:16px 16px 32px;display:flex;flex-direction:column;gap:16px}
-header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.app{max-width:560px;margin:0 auto;padding:16px 16px 32px;display:flex;flex-direction:column}
+body.full{padding-bottom:0}
+body.full .app{height:calc(100vh - env(safe-area-inset-top));height:calc(100dvh - env(safe-area-inset-top));padding-bottom:0}
+.view{display:flex;flex-direction:column;gap:16px}
+header,.bar{display:flex;align-items:center;justify-content:space-between;gap:10px}
 h1{font-family:var(--f-display);font-weight:400;font-size:28px;margin:0;letter-spacing:.03em}
+h2{flex:1;min-width:0;font-family:var(--f-display);font-weight:400;font-size:22px;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tabs{display:grid;grid-template-columns:1fr 1fr;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:3px}
 .tabs button{border:0;background:transparent;color:var(--muted);font:inherit;font-weight:600;padding:10px;border-radius:8px;cursor:pointer}
 .tabs button[aria-selected="true"]{background:var(--lapis);color:var(--bg)}
@@ -41,90 +46,180 @@ textarea{min-height:110px;resize:vertical}
 :focus-visible{outline:2px solid var(--lapis);outline-offset:1px}
 .pwrow{display:flex;gap:8px}
 .pwrow input{flex:1;min-width:0}
-.icon-btn{flex:none;width:48px;border:1px solid var(--line);background:var(--field);color:var(--ink);border-radius:8px;font-size:18px;cursor:pointer}
+.icon-btn{flex:none;width:48px;min-height:44px;border:1px solid var(--line);background:var(--field);color:var(--ink);border-radius:8px;font-size:18px;cursor:pointer}
 .check{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--muted)}
 .check input{width:auto}
 .btns{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.btns.one{grid-template-columns:1fr}
+.btns.three{grid-template-columns:1fr 1fr 1.5fr}
 .btn{font:inherit;font-weight:600;border-radius:10px;padding:14px;cursor:pointer;border:1px solid var(--lapis);background:transparent;color:var(--lapis)}
 .btn.primary{background:var(--lapis);color:var(--bg)}
+.btn.danger{border-color:var(--err);color:var(--err)}
 .btn:disabled{opacity:.45}
-.status{font-size:14px;min-height:1.3em;margin:0}
-.status.ok{color:var(--ok)}.status.err{color:var(--err)}
+.status{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 10px);transform:translateX(-50%);width:max-content;max-width:calc(100% - 32px);
+  margin:0;padding:10px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:14px;z-index:20;box-shadow:0 4px 14px rgba(0,0,0,.25)}
+.status:empty{display:none}
+.status.err{background:var(--err);color:var(--bg)}
 .tablet{background:var(--clay);border:1px solid var(--clay-edge);border-radius:14px 10px 16px 9px;padding:14px 12px;
   box-shadow:inset 0 2px 0 rgba(255,255,255,.25),inset 0 -3px 6px rgba(0,0,0,.12)}
-.tablet[hidden]{display:none}
 .signs{display:flex;flex-direction:row-reverse;flex-wrap:wrap;gap:4px 3px;max-height:260px;overflow-y:auto}
 .signs svg{width:24px;height:34px;color:var(--ink);flex:none}
 svg *{fill:none;stroke:currentColor;stroke-width:2.8;stroke-linecap:round;stroke-linejoin:round}
 svg .dot{fill:currentColor;stroke:none}
 .result{background:var(--lapis-soft);border-radius:10px;padding:14px;white-space:pre-wrap;word-break:break-word;font-size:17px}
-.result[hidden],section[hidden]{display:none}
 .hint{font-size:13px;color:var(--muted);margin:0}
 details{font-size:14px;color:var(--muted)}
 summary{cursor:pointer;font-weight:600}
 .legend{display:grid;grid-template-columns:repeat(8,1fr);gap:6px;margin-top:10px}
 .legend div{display:flex;flex-direction:column;align-items:center;font-family:var(--f-mono);font-size:12px}
 .legend svg{width:20px;height:28px;color:var(--ink)}
+
+/* Conversations */
+.convs{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.conv-item{width:100%;display:flex;align-items:center;gap:8px;padding:14px;border:1px solid var(--line);background:var(--field);
+  border-radius:10px;font:inherit;color:var(--ink);cursor:pointer;text-align:left}
+.conv-item .n{flex:1;min-width:0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.conv-item .d{flex:none;color:var(--muted);font-size:13px}
+#v-conv{flex:1;min-height:0;gap:0}
+.thread{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:14px 2px}
+.thread .hint{text-align:center;margin:auto 0}
+.msg{max-width:82%;padding:9px 12px;border-radius:16px;cursor:pointer}
+.msg.me{align-self:flex-end;background:var(--lapis);color:var(--bg);border-bottom-right-radius:4px}
+.msg.them{align-self:flex-start;background:var(--clay);border:1px solid var(--clay-edge);border-bottom-left-radius:4px}
+.msg .txt{white-space:pre-wrap;word-break:break-word}
+.msg .meta{font-size:11px;opacity:.7;margin-top:2px;text-align:right}
+.msg .tab{margin-top:8px;padding-top:8px;border-top:1px solid currentColor;display:flex;flex-direction:column;gap:8px;cursor:default}
+.msg .signs{max-height:150px;gap:2px}
+.msg .signs svg{width:14px;height:20px;color:inherit}
+.msg .tab button{font:inherit;font-size:13px;font-weight:600;padding:6px 10px;border-radius:8px;border:1px solid currentColor;background:transparent;color:inherit;cursor:pointer;align-self:flex-end}
+.composer{border-top:1px solid var(--line);padding:10px 0 calc(10px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:8px}
+.composer textarea{min-height:46px;max-height:140px;resize:none}
+.composer .btn{padding:12px 8px}
+.sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:flex-end;justify-content:center;z-index:10}
+.sheet{background:var(--bg);width:100%;max-width:560px;border-radius:16px 16px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:8px}
 </style>
 </head>
 <body>
 <div class="app">
-  <header>
-    <h1>Suse</h1>
-    <button class="icon-btn" id="clear" title="Tout effacer" aria-label="Tout effacer">⟲</button>
-  </header>
 
-  <div class="tabs" role="tablist">
-    <button role="tab" id="tab-w" aria-selected="true">Graver</button>
-    <button role="tab" id="tab-r" aria-selected="false">Lire</button>
-  </div>
+  <!-- ACCUEIL -->
+  <section class="view" id="v-home">
+    <header><h1>Suse</h1></header>
+    <ul class="convs" id="convs"></ul>
+    <p class="hint" id="empty">Aucune conversation pour l’instant. Crée-en une avec le même mot de passe que ton contact.</p>
+    <button class="btn primary" id="new">Nouvelle conversation</button>
+    <button class="btn" id="go-quick">Graver ou lire sans conversation</button>
+    <details>
+      <summary>Comment ça marche</summary>
+      <p>Chaque message est chiffré en AES-256-GCM avec une clé tirée du mot de passe de la conversation (PBKDF2, 310 000 itérations), puis écrit en 16 signes inspirés du proto-élamite. Le même message donne une tablette différente à chaque fois.</p>
+      <p>Les tablettes voyagent par WhatsApp, SMS ou autre : graver copie la tablette, « Coller » ajoute celle que tu as reçue. L’historique reste sur ce téléphone, chiffré avec le même mot de passe. Rien n’est envoyé à un serveur.</p>
+      <p>Choisis un mot de passe d’au moins 4 mots au hasard, et donne-le à ton contact de vive voix.</p>
+      <div class="legend" id="legend"></div>
+    </details>
+  </section>
 
-  <div class="field">
-    <label for="pw">Mot de passe</label>
-    <div class="pwrow">
-      <input id="pw" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Partagé avec ton contact">
-      <button class="icon-btn" id="eye" aria-label="Afficher le mot de passe">👁</button>
+  <!-- NOUVELLE CONVERSATION / CHANGER DE MOT DE PASSE -->
+  <section class="view" id="v-form" hidden>
+    <div class="bar"><button class="icon-btn" id="f-back" aria-label="Retour">←</button><h2 id="f-title"></h2></div>
+    <div class="field" id="f-name-field">
+      <label for="f-name">Nom</label>
+      <input id="f-name" autocomplete="off" placeholder="Ex. : Léa">
     </div>
-    <label class="check"><input type="checkbox" id="remember"> Mémoriser sur cet appareil</label>
-  </div>
-
-  <!-- GRAVER -->
-  <section id="view-w">
     <div class="field">
-      <label for="msg">Message</label>
-      <textarea id="msg" placeholder="Écris ton message secret…"></textarea>
+      <label for="f-pw">Mot de passe</label>
+      <div class="pwrow">
+        <input id="f-pw" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Le même que ton contact">
+        <button class="icon-btn" data-eye="f-pw" aria-label="Afficher le mot de passe">👁</button>
+      </div>
+      <label class="check"><input type="checkbox" id="f-remember"> Mémoriser sur cet appareil</label>
     </div>
-    <div class="btns" style="margin-top:12px">
-      <button class="btn primary" id="engrave">Graver et copier</button>
-      <button class="btn" id="share">Partager</button>
+    <p class="hint" id="f-hint"></p>
+    <button class="btn primary" id="f-go"></button>
+  </section>
+
+  <!-- DÉVERROUILLER -->
+  <section class="view" id="v-unlock" hidden>
+    <div class="bar"><button class="icon-btn" id="u-back" aria-label="Retour">←</button><h2 id="u-name"></h2></div>
+    <div class="field">
+      <label for="u-pw">Mot de passe</label>
+      <div class="pwrow">
+        <input id="u-pw" type="password" autocomplete="off" autocapitalize="off" spellcheck="false">
+        <button class="icon-btn" data-eye="u-pw" aria-label="Afficher le mot de passe">👁</button>
+      </div>
+      <label class="check"><input type="checkbox" id="u-remember"> Mémoriser sur cet appareil</label>
+    </div>
+    <button class="btn primary" id="u-go">Ouvrir</button>
+  </section>
+
+  <!-- CONVERSATION -->
+  <section class="view" id="v-conv" hidden>
+    <div class="bar">
+      <button class="icon-btn" id="c-back" aria-label="Retour">←</button>
+      <h2 id="c-name"></h2>
+      <button class="icon-btn" id="c-menu" aria-label="Options">⋯</button>
+    </div>
+    <div class="thread" id="thread"></div>
+    <div class="composer">
+      <textarea id="c-msg" rows="1" placeholder="Message…"></textarea>
+      <div class="btns three">
+        <button class="btn" id="c-paste">Coller</button>
+        <button class="btn" id="c-share">Partager</button>
+        <button class="btn primary" id="c-send">Graver et copier</button>
+      </div>
     </div>
   </section>
 
-  <!-- LIRE -->
-  <section id="view-r" hidden>
+  <!-- SANS CONVERSATION -->
+  <section class="view" id="v-quick" hidden>
+    <div class="bar"><button class="icon-btn" id="q-back" aria-label="Retour">←</button><h2>Sans conversation</h2><button class="icon-btn" id="clear" title="Tout effacer" aria-label="Tout effacer">⟲</button></div>
+    <div class="tabs" role="tablist">
+      <button role="tab" id="tab-w" aria-selected="true">Graver</button>
+      <button role="tab" id="tab-r" aria-selected="false">Lire</button>
+    </div>
     <div class="field">
-      <label for="code">Tablette reçue</label>
-      <textarea id="code" class="code" spellcheck="false" placeholder="Colle ici le texte reçu…"></textarea>
+      <label for="pw">Mot de passe</label>
+      <div class="pwrow">
+        <input id="pw" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Partagé avec ton contact">
+        <button class="icon-btn" data-eye="pw" aria-label="Afficher le mot de passe">👁</button>
+      </div>
+      <label class="check"><input type="checkbox" id="remember"> Mémoriser sur cet appareil</label>
     </div>
-    <div class="btns" style="margin-top:12px">
-      <button class="btn" id="paste">Coller</button>
-      <button class="btn primary" id="read">Lire</button>
-    </div>
-    <div class="result" id="result" hidden style="margin-top:12px"></div>
+    <section id="view-w">
+      <div class="field">
+        <label for="msg">Message</label>
+        <textarea id="msg" placeholder="Écris ton message secret…"></textarea>
+      </div>
+      <div class="btns" style="margin-top:12px">
+        <button class="btn primary" id="engrave">Graver et copier</button>
+        <button class="btn" id="share">Partager</button>
+      </div>
+    </section>
+    <section id="view-r" hidden>
+      <div class="field">
+        <label for="code">Tablette reçue</label>
+        <textarea id="code" class="code" spellcheck="false" placeholder="Colle ici le texte reçu…"></textarea>
+      </div>
+      <div class="btns" style="margin-top:12px">
+        <button class="btn" id="paste">Coller</button>
+        <button class="btn primary" id="read">Lire</button>
+      </div>
+      <div class="result" id="result" hidden style="margin-top:12px"></div>
+    </section>
+    <div class="tablet" id="tablet" hidden><div class="signs" id="signs"></div></div>
   </section>
-
-  <p class="status" id="status" role="status"></p>
-
-  <div class="tablet" id="tablet" hidden><div class="signs" id="signs"></div></div>
-
-  <details>
-    <summary>Comment ça marche</summary>
-    <p>Le message est chiffré en AES-256-GCM avec une clé tirée de ton mot de passe (PBKDF2, 310 000 itérations), puis écrit en 16 signes inspirés du proto-élamite. Le même message donne une tablette différente à chaque fois. Rien ne quitte ton téléphone.</p>
-    <p>Choisis un mot de passe d'au moins 4 mots au hasard, et donne-le à ton contact de vive voix.</p>
-    <div class="legend" id="legend"></div>
-  </details>
 </div>
+
+<div class="sheet-bg" id="sheet" hidden>
+  <div class="sheet" role="menu">
+    <button class="btn" id="m-rename">Renommer</button>
+    <button class="btn" id="m-pw">Changer de mot de passe</button>
+    <button class="btn" id="m-remember"></button>
+    <button class="btn" id="m-lock">Verrouiller</button>
+    <button class="btn danger" id="m-delete">Supprimer la conversation</button>
+    <button class="btn primary" id="m-close">Fermer</button>
+  </div>
+</div>
+
+<p class="status" id="status" role="status"></p>
 
 <script>
 const G=['<ellipse cx="20" cy="28" rx="7" ry="20"/>','<ellipse cx="13" cy="28" rx="5" ry="18"/><ellipse cx="27" cy="28" rx="5" ry="18"/>','<path d="M20 4 L34 28 L20 52 L6 28 Z M20 4 L20 52"/>','<rect x="6" y="10" width="28" height="36"/><rect x="13" y="19" width="14" height="18"/>','<path d="M20 6 L34 30 L6 30 Z M20 30 L20 52"/>','<path d="M20 4 L34 28 L20 52 L6 28 Z M12 19 L28 37 M28 19 L12 37"/>','<circle cx="20" cy="28" r="14"/><circle class="dot" cx="20" cy="28" r="3.5"/>','<path d="M6 10 L34 10 M10 10 L10 48 M17 10 L17 48 M24 10 L24 48 M31 10 L31 48"/>','<path d="M6 20 L6 12 L34 12 L34 20 M20 12 L20 50"/>','<path d="M28 6 A18 22 0 1 0 28 50 A12 18 0 1 1 28 6 Z"/>','<path d="M20 4 L32 14 L32 42 L20 52 L8 42 L8 14 Z M8 28 L32 28 M20 14 L20 42"/>','<path d="M20 6 L20 50 M6 28 L34 28 M9 12 L31 44 M31 12 L9 44"/>','<circle cx="20" cy="17" r="10"/><circle cx="20" cy="40" r="10"/>','<rect x="8" y="20" width="24" height="28"/><path d="M12 6 L12 16 M20 4 L20 16 M28 6 L28 16"/>','<path d="M6 10 L34 10 L20 36 Z M6 46 L34 46"/>','<path d="M20 52 L20 20 M8 6 L8 20 L32 20 L32 6 M20 6 L20 20"/>'];
@@ -132,63 +227,256 @@ const T=['○','‖','◇','▣','△','◈','⊙','Ш','T','☾','⬡','✱','8
 const svg=i=>`<svg viewBox="0 0 40 56" aria-hidden="true">${G[i]}</svg>`;
 const $=id=>document.getElementById(id);
 const te=new TextEncoder(),td=new TextDecoder();
-const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}},del(k){try{localStorage.removeItem(k)}catch(e){}}};
+const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v);return true}catch(e){return false}},del(k){try{localStorage.removeItem(k)}catch(e){}}};
+const rand=n=>crypto.getRandomValues(new Uint8Array(n));
+const b64=u=>{let s='';for(const x of u)s+=String.fromCharCode(x);return btoa(s)};
+const unb64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+const clean=s=>s.replace(/\s+/g,'');
+const isTablet=s=>{const c=clean(s);return c.length>=92&&Array.from(c).every(ch=>T.includes(ch))};
+const when=t=>{const d=new Date(t);return d.toDateString()===new Date().toDateString()
+  ?d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})
+  :d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+' '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})};
 
 $('legend').innerHTML=G.map((_,i)=>`<div>${svg(i)}${T[i]}</div>`).join('');
+document.querySelectorAll('[data-eye]').forEach(b=>b.onclick=()=>{const i=$(b.dataset.eye);i.type=i.type==='password'?'text':'password'});
 
-// Mot de passe mémorisé (désactivé par défaut)
+let toast;
+function status(t,c){
+  $('status').textContent=t;$('status').className='status '+(c||'');
+  clearTimeout(toast);if(t&&!t.endsWith('…'))toast=setTimeout(()=>status(''),4000);
+}
+
+// ---------- Chiffrement (format des tablettes inchangé) ----------
+async function derive(pw,salt){
+  const b=await crypto.subtle.importKey('raw',te.encode(pw),'PBKDF2',false,['deriveKey']);
+  return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:310000,hash:'SHA-256'},b,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
+}
+// La clé de la prochaine tablette est préparée à l'avance : graver reste instantané,
+// et Safari autorise encore la copie et le partage, qui exigent un geste récent.
+let ready=null;
+function prep(pw){const salt=rand(16);ready={pw,salt,key:derive(pw,salt)};ready.key.catch(()=>{})}
+async function seal(msg,pw){
+  if(!ready||ready.pw!==pw)prep(pw);
+  const {salt,key}=ready;prep(pw);
+  const iv=rand(12);
+  const ct=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv},await key,te.encode(msg)));
+  const out=new Uint8Array(29+ct.length);out[0]=1;out.set(salt,1);out.set(iv,17);out.set(ct,29);
+  const n=[];for(const b of out)n.push(b>>4,b&15);return n;
+}
+async function unseal(text,pw){
+  const n=Array.from(clean(text)).map(c=>{const i=T.indexOf(c);if(i<0)throw 0;return i});
+  if(n.length%2)throw 0;
+  const b=new Uint8Array(n.length/2);for(let i=0;i<b.length;i++)b[i]=(n[2*i]<<4)|n[2*i+1];
+  if(b[0]!==1||b.length<46)throw 0;
+  const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:b.slice(17,29)},await derive(pw,b.slice(1,17)),b.slice(29));
+  return {n,msg:td.decode(pt)};
+}
+const toCode=n=>n.map(v=>T[v]).join('');
+async function copy(p){
+  try{if(window.ClipboardItem){await navigator.clipboard.write([new ClipboardItem({'text/plain':Promise.resolve(p).then(t=>new Blob([t],{type:'text/plain'}))})]);return true}}catch(e){}
+  try{await navigator.clipboard.writeText(await p);return true}catch(e){return false}
+}
+async function share(code){
+  if(navigator.share){try{await navigator.share({text:code})}catch(e){}return true}
+  return false;
+}
+
+// ---------- Navigation ----------
+const VIEWS=['home','form','unlock','conv','quick'];
+function show(v){
+  VIEWS.forEach(x=>$('v-'+x).hidden=x!==v);
+  document.body.classList.toggle('full',v==='conv');
+  status('');if(v==='home')renderHome();
+}
+
+// ---------- Conversations ----------
+// suse-convs : [{id, name, salt, data, updated, pw?}] ; data = iv + historique chiffré.
+let convs=[];try{convs=JSON.parse(store.get('suse-convs'))||[]}catch(e){}
+const persist=()=>store.set('suse-convs',JSON.stringify(convs))||(status('Mémoire du téléphone pleine : conversation non enregistrée.','err'),false);
+let cur=null; // conversation ouverte : {rec, pw, key, msgs}
+
+async function readHistory(rec,key){
+  const b=unb64(rec.data);
+  return JSON.parse(td.decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:b.slice(0,12)},key,b.slice(12))));
+}
+async function writeHistory(){
+  const iv=rand(12);
+  const ct=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv},cur.key,te.encode(JSON.stringify(cur.msgs))));
+  const b=new Uint8Array(12+ct.length);b.set(iv);b.set(ct,12);
+  cur.rec.data=b64(b);cur.rec.updated=Date.now();persist();
+}
+
+function renderHome(){
+  const ul=$('convs');ul.innerHTML='';
+  [...convs].sort((a,b)=>b.updated-a.updated).forEach(r=>{
+    const li=document.createElement('li'),b=document.createElement('button');
+    b.className='conv-item';b.innerHTML='<span class="n"></span><span class="d"></span>';
+    b.querySelector('.n').textContent=r.name;
+    b.querySelector('.d').textContent=when(r.updated)+(r.pw?'':' · 🔒');
+    b.onclick=()=>openConv(r);li.append(b);ul.append(li);
+  });
+  $('empty').hidden=convs.length>0;
+}
+
+let pending=null;
+async function openConv(r){
+  if(r.pw){status('Ouverture…');if(await unlock(r,r.pw))return}
+  pending=r;$('u-name').textContent=r.name;$('u-pw').value='';$('u-remember').checked=false;show('unlock');
+  if(r.pw)status('Le mot de passe mémorisé ne fonctionne plus.','err');else $('u-pw').focus();
+}
+async function unlock(r,pw,remember){
+  try{
+    const key=await derive(pw,unb64(r.salt)),msgs=await readHistory(r,key);
+    cur={rec:r,pw,key,msgs};
+    if(remember){r.pw=pw;persist()}
+    enterConv();return true;
+  }catch(e){status('Mot de passe incorrect.','err');return false}
+}
+$('u-go').onclick=()=>{const pw=$('u-pw').value;if(!pw)return status('Entre le mot de passe.','err');status('Ouverture…');unlock(pending,pw,$('u-remember').checked)};
+$('u-pw').onkeydown=e=>{if(e.key==='Enter')$('u-go').click()};
+$('u-back').onclick=()=>show('home');
+
+function enterConv(){
+  $('c-name').textContent=cur.rec.name;show('conv');renderThread();prep(cur.pw);
+}
+function closeConv(){cur=null;ready=null;$('c-msg').value='';show('home')}
+$('c-back').onclick=closeConv;
+
+function renderThread(){
+  const th=$('thread');th.innerHTML='';
+  if(!cur.msgs.length)th.innerHTML='<p class="hint">Écris un premier message, ou colle une tablette reçue.</p>';
+  cur.msgs.forEach(m=>th.append(bubble(m)));
+  th.scrollTop=th.scrollHeight;
+}
+function bubble(m){
+  const d=document.createElement('div');d.className='msg '+(m.me?'me':'them');
+  d.innerHTML='<div class="txt"></div><div class="meta"></div>';
+  d.querySelector('.txt').textContent=m.text;
+  d.querySelector('.meta').textContent=when(m.t);
+  // Toucher une bulle montre sa tablette, avec de quoi la recopier
+  d.onclick=()=>{
+    const open=d.querySelector('.tab');if(open)return open.remove();
+    const tab=document.createElement('div');tab.className='tab';
+    tab.innerHTML=`<div class="signs">${Array.from(m.code).map(c=>svg(T.indexOf(c))).join('')}</div><button>Copier la tablette</button>`;
+    tab.onclick=e=>e.stopPropagation();
+    tab.querySelector('button').onclick=async()=>status(await copy(m.code)?'Tablette copiée.':'Copie impossible ici.',);
+    d.append(tab);
+  };
+  return d;
+}
+
+async function send(viaShare){
+  const text=$('c-msg').value;
+  if(!text.trim())return status('Écris d’abord un message.','err');
+  const p=seal(text,cur.pw).then(toCode);
+  const copied=viaShare?false:await copy(p);
+  let code;try{code=await p}catch(e){return status('Gravure impossible.','err')}
+  if(viaShare&&!await share(code))status(await copy(code)?'Partage non disponible ici : tablette copiée.':'Partage non disponible ici.');
+  else if(!viaShare)status(copied?'Tablette copiée. Colle-la dans ta conversation.':'Tablette gravée. Touche-la pour la copier.');
+  cur.msgs.push({me:1,t:Date.now(),text,code});
+  $('c-msg').value='';fit();
+  await writeHistory();renderThread();
+}
+$('c-send').onclick=()=>send(false);
+$('c-share').onclick=()=>send(true);
+
+async function receive(raw){
+  const c=clean(raw||'');if(!c)return;
+  if(cur.msgs.some(m=>m.code===c))return status('Ce message est déjà dans la conversation.');
+  status('Lecture…');
+  try{
+    const r=await unseal(c,cur.pw);
+    cur.msgs.push({me:0,t:Date.now(),text:r.msg,code:c});
+    await writeHistory();renderThread();status('Message reçu.');
+  }catch(e){
+    status(isTablet(c)?'Cette tablette n’a pas été gravée avec le mot de passe de cette conversation.':'Ce texte n’est pas une tablette complète.','err');
+  }
+}
+$('c-paste').onclick=async()=>{
+  let t;try{t=await navigator.clipboard.readText()}catch(e){t=prompt('Colle ici la tablette reçue :')}
+  receive(t);
+};
+// Coller une tablette directement dans le champ de message l'ajoute comme message reçu
+$('c-msg').addEventListener('paste',e=>{
+  const t=e.clipboardData&&e.clipboardData.getData('text');
+  if(t&&isTablet(t)){e.preventDefault();receive(t)}
+});
+function fit(){const a=$('c-msg');a.style.height='auto';a.style.height=Math.min(a.scrollHeight+2,140)+'px'}
+$('c-msg').oninput=fit;
+
+// Menu de la conversation
+$('c-menu').onclick=()=>{$('m-remember').textContent=cur.rec.pw?'Oublier le mot de passe sur cet appareil':'Mémoriser le mot de passe sur cet appareil';$('sheet').hidden=false};
+const closeSheet=()=>{$('sheet').hidden=true};
+$('sheet').onclick=e=>{if(e.target===$('sheet'))closeSheet()};
+$('m-close').onclick=closeSheet;
+$('m-rename').onclick=()=>{closeSheet();const n=prompt('Nouveau nom :',cur.rec.name);if(n&&n.trim()){cur.rec.name=n.trim();persist();$('c-name').textContent=cur.rec.name}};
+$('m-remember').onclick=()=>{closeSheet();if(cur.rec.pw){delete cur.rec.pw;status('Mot de passe oublié sur cet appareil.')}else{cur.rec.pw=cur.pw;status('Mot de passe mémorisé sur cet appareil.')}persist()};
+$('m-lock').onclick=()=>{closeSheet();closeConv()};
+$('m-delete').onclick=()=>{closeSheet();if(!confirm(`Supprimer « ${cur.rec.name} » et tout son historique de cet appareil ?`))return;convs=convs.filter(r=>r!==cur.rec);persist();closeConv()};
+$('m-pw').onclick=()=>{closeSheet();openForm('pw')};
+
+// Nouvelle conversation / changement de mot de passe
+let formMode='new';
+function openForm(mode){
+  formMode=mode;const isNew=mode==='new';
+  $('f-title').textContent=isNew?'Nouvelle conversation':'Nouveau mot de passe';
+  $('f-name-field').hidden=!isNew;$('f-name').value='';$('f-pw').value='';$('f-pw').type='password';
+  $('f-remember').checked=!isNew&&!!cur.rec.pw;
+  $('f-go').textContent=isNew?'Créer':'Changer';
+  $('f-hint').textContent=isNew
+    ?'Ton contact doit créer une conversation avec exactement le même mot de passe.'
+    :'Donne le nouveau mot de passe à ton contact. L’historique reste lisible ici, mais les tablettes encore gravées avec l’ancien ne pourront plus être ajoutées.';
+  show('form');(isNew?$('f-name'):$('f-pw')).focus();
+}
+$('new').onclick=()=>openForm('new');
+$('f-back').onclick=()=>formMode==='new'?show('home'):enterConv();
+$('f-go').onclick=async()=>{
+  const pw=$('f-pw').value,name=$('f-name').value.trim();
+  if(formMode==='new'&&!name)return status('Donne un nom à la conversation.','err');
+  if(!pw)return status('Choisis un mot de passe.','err');
+  status('Préparation…');
+  const salt=rand(16),key=await derive(pw,salt);
+  if(formMode==='new'){
+    const rec={id:b64(rand(9)),name,salt:b64(salt),updated:Date.now()};
+    convs.push(rec);cur={rec,pw,key,msgs:[]};
+  }else{cur.rec.salt=b64(salt);cur.pw=pw;cur.key=key}
+  if($('f-remember').checked)cur.rec.pw=pw;else delete cur.rec.pw;
+  await writeHistory();
+  const changed=formMode==='pw';enterConv();
+  if(changed)status('Mot de passe changé.');
+};
+
+// ---------- Sans conversation (graver / lire une tablette isolée) ----------
+$('go-quick').onclick=()=>show('quick');
+$('q-back').onclick=()=>show('home');
 if(store.get('suse-pw')){$('pw').value=store.get('suse-pw');$('remember').checked=true}
 $('remember').onchange=()=>$('remember').checked?store.set('suse-pw',$('pw').value):store.del('suse-pw');
 $('pw').oninput=()=>{if($('remember').checked)store.set('suse-pw',$('pw').value)};
-$('eye').onclick=()=>{$('pw').type=$('pw').type==='password'?'text':'password'};
+$('msg').onfocus=()=>{const pw=$('pw').value;if(pw&&(!ready||ready.pw!==pw))prep(pw)};
 
-// Onglets
 function tab(r){
   $('tab-w').setAttribute('aria-selected',!r);$('tab-r').setAttribute('aria-selected',r);
   $('view-w').hidden=r;$('view-r').hidden=!r;status('');
 }
 $('tab-w').onclick=()=>tab(false);$('tab-r').onclick=()=>tab(true);
-
-function status(t,c){$('status').textContent=t;$('status').className='status '+(c||'')}
 function showSigns(n){$('signs').innerHTML=n.map(svg).join('');$('tablet').hidden=false}
-
-async function key(pw,salt){
-  const b=await crypto.subtle.importKey('raw',te.encode(pw),'PBKDF2',false,['deriveKey']);
-  return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:310000,hash:'SHA-256'},b,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
-}
-async function seal(msg,pw){
-  const salt=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12));
-  const ct=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv},await key(pw,salt),te.encode(msg)));
-  const out=new Uint8Array(29+ct.length);out[0]=1;out.set(salt,1);out.set(iv,17);out.set(ct,29);
-  const n=[];for(const b of out)n.push(b>>4,b&15);return n;
-}
-async function open(text,pw){
-  const n=Array.from(text.replace(/\s+/g,'')).map(c=>{const i=T.indexOf(c);if(i<0)throw 0;return i});
-  if(n.length%2)throw 0;
-  const b=new Uint8Array(n.length/2);for(let i=0;i<b.length;i++)b[i]=(n[2*i]<<4)|n[2*i+1];
-  if(b[0]!==1||b.length<46)throw 0;
-  const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:b.slice(17,29)},await key(pw,b.slice(1,17)),b.slice(29));
-  return {n,msg:td.decode(pt)};
-}
 
 let lastCode='';
 async function engrave(){
   const m=$('msg').value,pw=$('pw').value;
   if(!pw)return status('Entre d’abord un mot de passe.','err');
   if(!m.trim())return status('Écris d’abord un message.','err');
-  status('Gravure…');
-  const n=await seal(m,pw);lastCode=n.map(v=>T[v]).join('');
-  showSigns(n);
-  try{await navigator.clipboard.writeText(lastCode);status('Tablette copiée. Colle-la dans ta conversation.','ok')}
-  catch(e){status('Tablette gravée. Utilise « Partager » pour l’envoyer.','ok')}
+  const p=seal(m,pw);
+  const copied=await copy(p.then(toCode));
+  const n=await p;lastCode=toCode(n);showSigns(n);
+  status(copied?'Tablette copiée. Colle-la dans ta conversation.':'Tablette gravée. Utilise « Partager » pour l’envoyer.');
   return lastCode;
 }
 $('engrave').onclick=engrave;
 $('share').onclick=async()=>{
   const code=lastCode&&$('msg').dataset.sent===$('msg').value?lastCode:await engrave();
   if(!code)return;$('msg').dataset.sent=$('msg').value;
-  if(navigator.share){try{await navigator.share({text:code})}catch(e){}}
-  else status('Partage non disponible ici : le texte est déjà copié.','ok');
+  if(!await share(code))status('Partage non disponible ici : le texte est déjà copié.');
 };
 $('msg').oninput=()=>{lastCode=''};
 
@@ -201,16 +489,14 @@ async function read(){
   if(!c.trim())return status('Colle d’abord une tablette.','err');
   if(!pw)return status('Entre le mot de passe.','err');
   status('Lecture…');$('result').hidden=true;
-  try{const r=await open(c,pw);showSigns(r.n);$('result').textContent=r.msg;$('result').hidden=false;status('Message déchiffré.','ok')}
+  try{const r=await unseal(c,pw);showSigns(r.n);$('result').textContent=r.msg;$('result').hidden=false;status('Message déchiffré.')}
   catch(e){status('Lecture impossible : mauvais mot de passe, ou tablette incomplète.','err')}
 }
 $('read').onclick=read;
-
 $('clear').onclick=()=>{$('msg').value='';$('code').value='';$('result').hidden=true;$('tablet').hidden=true;lastCode='';status('')};
-
-// Ouvrir directement sur « Lire » si on colle un texte de signes
 $('code').addEventListener('paste',()=>setTimeout(()=>{if($('pw').value)read()},0));
 
+renderHome();
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 </script>
 </body>

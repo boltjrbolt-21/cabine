@@ -21,8 +21,15 @@ HTTPS est obligatoire : le chiffrement du navigateur ne marche pas en `http://` 
 - **Android (Chrome)** : ouvre l'adresse → menu ⋮ → « Installer l'application ».
 
 ## Utilisation
-- **Graver** : mot de passe + message → « Graver et copier » (ou « Partager » vers WhatsApp, SMS…).
-- **Lire** : « Coller » → le message s'affiche si le mot de passe est bon.
+1. **Nouvelle conversation** : un nom et un mot de passe. Ton contact fait pareil, avec le même mot de passe.
+2. **Écrire** : tape ton message → « Graver et copier », puis colle la tablette dans WhatsApp, SMS…
+   (ou « Partager »).
+3. **Recevoir** : copie la tablette reçue → « Coller » dans la conversation. Elle s'ajoute au fil.
+4. Touche une bulle pour voir sa tablette et la recopier.
 
-Ton contact doit utiliser la même appli et le même mot de passe.
+L'historique reste sur ton téléphone, chiffré avec le mot de passe de la conversation.
+Le menu ⋯ permet de renommer, changer de mot de passe, mémoriser ou oublier le mot de passe,
+verrouiller ou supprimer la conversation.
+
+« Graver ou lire sans conversation » garde l'ancien fonctionnement, pour un message isolé.
 Les tablettes faites avec la version précédente (artifact) sont compatibles.
