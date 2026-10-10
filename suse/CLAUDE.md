@@ -20,6 +20,9 @@ et les afficher en signes inspirés de l'écriture proto-élamite (tablettes de 
   profondes (nombres), `r` grands cercles. `G` est généré depuis `S`. Modèle : tablettes du Louvre
   (J. L. Dahl, *Tablettes et fragments proto-élamites*) : traits droits, peu de courbes.
   Rendu incisé : `svg()` dessine un liseré `.hl` décalé sous le signe.
+- Affichage : un signe par octet (paire de quartets), soit 256 signes. Quartet fort → forme de base `G`,
+  quartet faible → variante `M` (pivotée, encadrée, redoublée, empreintes ou traits ajoutés). Voir `sign()`
+  et `signsOf()`. Purement visuel : seul le texte en caractères `T` sert au déchiffrement.
   Changer `S` ne casse rien ; changer `T` casserait toutes les tablettes.
 - Affichage de droite à gauche (`flex-direction: row-reverse`), comme les tablettes.
 

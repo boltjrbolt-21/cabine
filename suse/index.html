@@ -62,7 +62,7 @@ textarea{min-height:110px;resize:vertical}
 .tablet{background:var(--clay);border:1px solid var(--clay-edge);border-radius:14px 10px 16px 9px;padding:14px 12px;
   box-shadow:inset 0 2px 0 rgba(255,255,255,.25),inset 0 -3px 6px rgba(0,0,0,.12)}
 .signs{display:flex;flex-direction:row-reverse;flex-wrap:wrap;gap:4px 3px;max-height:260px;overflow-y:auto}
-.signs svg{width:24px;height:34px;color:var(--ink);flex:none}
+.signs svg{width:28px;height:39px;color:var(--ink);flex:none}
 svg *{fill:none;stroke:currentColor;stroke-width:3.2;stroke-linecap:round;stroke-linejoin:round}
 svg .dot{fill:currentColor;stroke:none}
 svg .hl *{stroke:var(--clay-hl)}
@@ -92,7 +92,7 @@ summary{cursor:pointer;font-weight:600}
 .msg .meta{font-size:11px;opacity:.7;margin-top:2px;text-align:right}
 .msg .tab{margin-top:8px;padding-top:8px;border-top:1px solid currentColor;display:flex;flex-direction:column;gap:8px;cursor:default}
 .msg .signs{max-height:150px;gap:2px}
-.msg .signs svg{width:14px;height:20px;color:inherit}
+.msg .signs svg{width:18px;height:25px;color:inherit}
 .msg.me svg .hl{display:none}
 .msg .tab button{font:inherit;font-size:13px;font-weight:600;padding:6px 10px;border-radius:8px;border:1px solid currentColor;background:transparent;color:inherit;cursor:pointer;align-self:flex-end}
 .composer{border-top:1px solid var(--line);padding:10px 0 calc(10px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:8px}
@@ -114,7 +114,7 @@ summary{cursor:pointer;font-weight:600}
     <button class="btn" id="go-quick">Graver ou lire sans conversation</button>
     <details>
       <summary>Comment ça marche</summary>
-      <p>Chaque message est chiffré en AES-256-GCM avec une clé tirée du mot de passe de la conversation (PBKDF2, 310 000 itérations), puis écrit en 16 signes inspirés du proto-élamite : traits de stylet et empreintes rondes ou en coin, comme sur les tablettes de Suse (dessins stylisés, pas des copies exactes). Le texte envoyé utilise des caractères ordinaires (○ ‖ ◇…), seuls lisibles par tous les téléphones. Le même message donne une tablette différente à chaque fois.</p>
+      <p>Chaque message est chiffré en AES-256-GCM avec une clé tirée du mot de passe de la conversation (PBKDF2, 310 000 itérations), puis gravé en signes inspirés du proto-élamite : 16 formes de base, chacune déclinée en 16 variantes, soit 256 signes faits de traits de stylet et empreintes rondes ou en coin, comme sur les tablettes de Suse (dessins stylisés, pas des copies exactes). Le texte envoyé utilise des caractères ordinaires (○ ‖ ◇…), seuls lisibles par tous les téléphones. Le même message donne une tablette différente à chaque fois.</p>
       <p>Les tablettes voyagent par WhatsApp, SMS ou autre : graver copie la tablette, « Coller » ajoute celle que tu as reçue. L’historique reste sur ce téléphone, chiffré avec le même mot de passe. Rien n’est envoyé à un serveur.</p>
       <p>Choisis un mot de passe d’au moins 4 mots au hasard, et donne-le à ton contact de vive voix.</p>
       <div class="legend" id="legend"></div>
@@ -254,12 +254,44 @@ function wedge([x1,y1,x2,y2]){
   const P=[[x1-ux,y1-uy],[x1+ux*h+nx*2.7,y1+uy*h+ny*2.7],[x2+nx*.6,y2+ny*.6],[x2-nx*.6,y2-ny*.6],[x1+ux*h-nx*2.7,y1+uy*h-ny*2.7]];
   return `<path class="dot" d="M${P.map(p=>f(p[0])+' '+f(p[1])).join(' L')} Z"/>`;
 }
-const G=S.map(({w=[],o=[],r=[]})=>w.map(wedge).join('')
-  +o.map(([x,y,s])=>`<circle class="dot" cx="${x}" cy="${y}" r="${s}"/>`).join('')
-  +r.map(([x,y,s])=>`<circle class="ring" cx="${x}" cy="${y}" r="${s}"/>`).join(''));
+
 const T=['○','‖','◇','▣','△','◈','⊙','Ш','T','☾','⬡','✱','8','⊓','▽','Ψ'];
+// 256 signes affichés : un par paire de caractères (un octet). Le quartet fort choisit la forme de base,
+// le quartet faible une variante, comme les signes dérivés des tablettes (pivotés, encadrés, redoublés,
+// accompagnés d'empreintes ou de traits). Affichage seulement : le texte transmis reste en signes de `T`.
+const ext=({w=[],o=[],r=[]})=>w.map(wedge).join('')
+  +o.map(([x,y,s])=>`<circle class="dot" cx="${x}" cy="${y}" r="${s}"/>`).join('')
+  +r.map(([x,y,s])=>`<circle class="ring" cx="${x}" cy="${y}" r="${s}"/>`).join('');
+const at=(x,y,k=.72)=>`translate(${x} ${y}) scale(${k})`;
+const M=[ // [placement de la forme de base, éléments ajoutés]
+  ['',{}],                                                                      // seule
+  ['translate(20 28) rotate(90) scale(.7) translate(-20 -28)',{}],             // pivotée
+  [at(5.6,2),{w:[[5,50,35,50]]}],                                               // soulignée
+  [at(1,8),{o:[[35,28,3.6]]}],                                                  // empreinte à droite
+  [at(5.6,15),{o:[[13,7,3.4],[27,7,3.4]]}],                                     // deux empreintes au-dessus
+  [at(10,8),{w:[[3,8,3,48]]}],                                                  // trait à gauche
+  [at(5.6,1),{w:[[12,44,12,54],[20,44,20,54],[28,44,28,54]]}],                  // trois pieds
+  [at(7.6,10.6,.62),{w:[[3,5,37,5],[3,5,3,51],[37,5,37,51],[3,51,37,51]]}],     // encadrée
+  [at(0,8),{w:[[39,15,31,28],[39,41,31,28]]}],                                  // chevron à droite
+  [at(5.6,15),{w:[[20,2,7,12],[20,2,33,12]]}],                                  // chapeau
+  ['translate(20 22) rotate(90) scale(.62) translate(-20 -28)',{o:[[20,47,4]]}],// pivotée, empreinte dessous
+  [at(5.6,0),{r:[[20,49,5]]}],                                                  // cercle dessous
+  [at(11,8),{o:[[5,18,3.2],[5,38,3.2]]}],                                       // deux empreintes à gauche
+  [at(5.6,15),{w:[[13,2,27,13],[27,2,13,13]]}],                                 // croix au-dessus
+  ['',null],                                                                    // redoublée
+  [at(0,8),{w:[[32,12,38,22],[32,24,38,34],[32,36,38,46]]}],                    // traits obliques à droite
+];
+function sign(b){
+  const g=G[b>>4],[t,e]=M[b&15];
+  if(!e)return `<g transform="translate(0 14) scale(.5)">${g}</g><g transform="translate(20 14) scale(.5)">${g}</g>`;
+  return (t?`<g transform="${t}">${g}</g>`:g)+ext(e);
+}
 // Deux passes : un liseré clair décalé puis le trait sombre, pour l’effet d’incision
-const svg=i=>`<svg viewBox="0 0 40 56" aria-hidden="true"><g class="hl" transform="translate(.9 1.2)">${G[i]}</g><g>${G[i]}</g></svg>`;
+const G=S.map(ext);
+const svgOf=inner=>`<svg viewBox="0 0 40 56" aria-hidden="true"><g class="hl" transform="translate(.9 1.2)">${inner}</g><g>${inner}</g></svg>`;
+const svg=b=>svgOf(sign(b));
+// Quartets (0–15) → signes affichés, deux par deux
+const signsOf=n=>{let h='';for(let i=0;i+1<n.length;i+=2)h+=svg(n[i]<<4|n[i+1]);return h};
 const $=id=>document.getElementById(id);
 const te=new TextEncoder(),td=new TextDecoder();
 const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v);return true}catch(e){return false}},del(k){try{localStorage.removeItem(k)}catch(e){}}};
@@ -272,7 +304,8 @@ const when=t=>{const d=new Date(t);return d.toDateString()===new Date().toDateSt
   ?d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})
   :d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+' '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})};
 
-$('legend').innerHTML=G.map((_,i)=>`<div>${svg(i)}${T[i]}</div>`).join('');
+$('legend').innerHTML=G.map((_,i)=>`<div>${svg(i<<4)}${T[i]}</div>`).join('')
+  +M.map((_,j)=>`<div>${svg(j)}${T[0]}${T[j]}</div>`).join('');
 document.querySelectorAll('[data-eye]').forEach(b=>b.onclick=()=>{const i=$(b.dataset.eye);i.type=i.type==='password'?'text':'password'});
 
 let toast;
@@ -392,7 +425,7 @@ function bubble(m){
   d.onclick=()=>{
     const open=d.querySelector('.tab');if(open)return open.remove();
     const tab=document.createElement('div');tab.className='tab';
-    tab.innerHTML=`<div class="signs">${Array.from(m.code).map(c=>svg(T.indexOf(c))).join('')}</div><button>Copier la tablette</button>`;
+    tab.innerHTML=`<div class="signs">${signsOf(Array.from(m.code).map(c=>T.indexOf(c)))}</div><button>Copier la tablette</button>`;
     tab.onclick=e=>e.stopPropagation();
     tab.querySelector('button').onclick=async()=>status(await copy(m.code)?'Tablette copiée.':'Copie impossible ici.',);
     d.append(tab);
@@ -494,7 +527,7 @@ function tab(r){
   $('view-w').hidden=r;$('view-r').hidden=!r;status('');
 }
 $('tab-w').onclick=()=>tab(false);$('tab-r').onclick=()=>tab(true);
-function showSigns(n){$('signs').innerHTML=n.map(svg).join('');$('tablet').hidden=false}
+function showSigns(n){$('signs').innerHTML=signsOf(n);$('tablet').hidden=false}
 
 let lastCode='';
 async function engrave(){
