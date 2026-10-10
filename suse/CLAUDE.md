@@ -37,6 +37,16 @@ et les afficher en signes inspirés de l'écriture proto-élamite (tablettes de 
 - La clé de la tablette suivante est dérivée à l'avance (`prep`) pour que copie et partage gardent le
   geste utilisateur exigé par Safari.
 
+## Verrouillage Face ID (optionnel)
+- Clé d'accès WebAuthn (plateforme, vérification obligatoire → Face ID ou code du téléphone).
+  localStorage `suse-lock` : `{id, salt, prf}`.
+- Si l'extension PRF répond (iOS 18+) : secret PRF → HKDF → clé AES du coffre `suse-vault`
+  (`[iv 12][JSON {convs, qpw} chiffré]`), et `suse-convs` / `suse-pw` sont supprimés. Verrouillée,
+  l'appli n'a plus rien en clair en mémoire. Sans PRF : simple écran, stockage inchangé.
+- Verrouillage : menu ⋯ « Verrouiller », bouton 🔒 de l'accueil, au lancement, et après 60 s en
+  arrière-plan. Supprimer la clé d'accès dans les réglages rend le coffre illisible (prévenu à l'activation).
+- Test : Chromium + authentificateur virtuel CDP (`WebAuthn.addVirtualAuthenticator`, `hasPrf`).
+
 ## Contraintes
 - Web Crypto exige HTTPS (ou localhost). Tester avec `npx serve .` ou `python3 -m http.server`.
 - Rien ne doit partir vers un serveur : tout reste dans le navigateur.

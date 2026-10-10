@@ -31,5 +31,11 @@ L'historique reste sur ton téléphone, chiffré avec le mot de passe de la conv
 Le menu ⋯ permet de renommer, changer de mot de passe, mémoriser ou oublier le mot de passe,
 verrouiller ou supprimer la conversation.
 
+**Verrouillage Face ID** : sur l'accueil, « Verrouiller avec Face ID ». Suse s'ouvre alors seulement avec
+Face ID ou le code du téléphone, au lancement et après une minute en arrière-plan ; 🔒 ou le menu ⋯
+« Verrouiller » la ferme tout de suite. Sur iOS 18 et plus, les conversations sont en plus chiffrées par
+Face ID tant que l'appli est verrouillée. Ne supprime pas la clé d'accès « Suse » des réglages du
+téléphone : l'historique deviendrait illisible.
+
 « Graver ou lire sans conversation » garde l'ancien fonctionnement, pour un message isolé.
 Les tablettes faites avec la version précédente (artifact) sont compatibles.

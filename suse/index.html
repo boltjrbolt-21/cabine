@@ -98,6 +98,9 @@ summary{cursor:pointer;font-weight:600}
 .composer{border-top:1px solid var(--line);padding:10px 0 calc(10px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:8px}
 .composer textarea{min-height:46px;max-height:140px;resize:none}
 .composer .btn{padding:12px 8px}
+.lockscreen{min-height:75vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;text-align:center}
+.lockscreen svg{width:64px;height:90px;color:var(--ink)}
+.lockscreen .btn{min-width:220px}
 .sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:flex-end;justify-content:center;z-index:10}
 .sheet{background:var(--bg);width:100%;max-width:560px;border-radius:16px 16px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:8px}
 </style>
@@ -107,11 +110,13 @@ summary{cursor:pointer;font-weight:600}
 
   <!-- ACCUEIL -->
   <section class="view" id="v-home">
-    <header><h1>Suse</h1></header>
+    <header><h1>Suse</h1><button class="icon-btn" id="lock-now" aria-label="Verrouiller" hidden>🔒</button></header>
     <ul class="convs" id="convs"></ul>
     <p class="hint" id="empty">Aucune conversation pour l’instant. Crée-en une avec le même mot de passe que ton contact.</p>
     <button class="btn primary" id="new">Nouvelle conversation</button>
     <button class="btn" id="go-quick">Graver ou lire sans conversation</button>
+    <button class="btn" id="lock-setup" hidden></button>
+    <p class="hint" id="lock-hint" hidden></p>
     <details>
       <summary>Comment ça marche</summary>
       <p>Chaque message est chiffré en AES-256-GCM avec une clé tirée du mot de passe de la conversation (PBKDF2, 310 000 itérations), puis gravé en signes inspirés du proto-élamite : 16 formes de base, chacune déclinée en 16 variantes, soit 256 signes faits de traits de stylet et empreintes rondes ou en coin, comme sur les tablettes de Suse (dessins stylisés, pas des copies exactes). Le texte envoyé utilise des caractères ordinaires (○ ‖ ◇…), seuls lisibles par tous les téléphones. Le même message donne une tablette différente à chaque fois.</p>
@@ -119,6 +124,16 @@ summary{cursor:pointer;font-weight:600}
       <p>Choisis un mot de passe d’au moins 4 mots au hasard, et donne-le à ton contact de vive voix.</p>
       <div class="legend" id="legend"></div>
     </details>
+  </section>
+
+  <!-- VERROUILLÉE -->
+  <section class="view" id="v-lock" hidden>
+    <div class="lockscreen">
+      <div id="lock-sign"></div>
+      <h1>Suse</h1>
+      <p class="hint">Verrouillée</p>
+      <button class="btn primary" id="lock-open">Déverrouiller</button>
+    </div>
   </section>
 
   <!-- NOUVELLE CONVERSATION / CHANGER DE MOT DE PASSE -->
@@ -350,7 +365,7 @@ async function share(code){
 }
 
 // ---------- Navigation ----------
-const VIEWS=['home','form','unlock','conv','quick'];
+const VIEWS=['home','form','unlock','conv','quick','lock'];
 function show(v){
   VIEWS.forEach(x=>$('v-'+x).hidden=x!==v);
   document.body.classList.toggle('full',v==='conv');
@@ -359,8 +374,28 @@ function show(v){
 
 // ---------- Conversations ----------
 // suse-convs : [{id, name, salt, data, updated, pw?}] ; data = iv + historique chiffré.
-let convs=[];try{convs=JSON.parse(store.get('suse-convs'))||[]}catch(e){}
-const persist=()=>store.set('suse-convs',JSON.stringify(convs))||(status('Mémoire du téléphone pleine : conversation non enregistrée.','err'),false);
+// suse-pw : mot de passe mémorisé du mode sans conversation (qpw).
+// Avec le verrou Face ID à clé PRF, ces deux entrées sont remplacées par suse-vault (voir plus bas).
+let convs=[],qpw=null,appKey=null;
+let lock=null;try{lock=JSON.parse(store.get('suse-lock'))}catch(e){}
+function loadPlain(){try{convs=JSON.parse(store.get('suse-convs'))||[]}catch(e){convs=[]}qpw=store.get('suse-pw')}
+const full=()=>status('Mémoire du téléphone pleine : conversation non enregistrée.','err');
+let saving=Promise.resolve();
+function persist(){
+  if(lock&&lock.prf){
+    if(!appKey)return false;
+    const data=te.encode(JSON.stringify({convs,qpw})),k=appKey;
+    saving=saving.then(async()=>{
+      const iv=rand(12),ct=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv},k,data));
+      const b=new Uint8Array(12+ct.length);b.set(iv);b.set(ct,12);
+      if(!store.set('suse-vault',b64(b)))full();
+    }).catch(()=>{});
+    return true;
+  }
+  const ok=store.set('suse-convs',JSON.stringify(convs));
+  if(qpw!=null)store.set('suse-pw',qpw);else store.del('suse-pw');
+  if(!ok)full();return ok;
+}
 let cur=null; // conversation ouverte : {rec, pw, key, msgs}
 
 async function readHistory(rec,key){
@@ -479,7 +514,7 @@ $('sheet').onclick=e=>{if(e.target===$('sheet'))closeSheet()};
 $('m-close').onclick=closeSheet;
 $('m-rename').onclick=()=>{closeSheet();const n=prompt('Nouveau nom :',cur.rec.name);if(n&&n.trim()){cur.rec.name=n.trim();persist();$('c-name').textContent=cur.rec.name}};
 $('m-remember').onclick=()=>{closeSheet();if(cur.rec.pw){delete cur.rec.pw;status('Mot de passe oublié sur cet appareil.')}else{cur.rec.pw=cur.pw;status('Mot de passe mémorisé sur cet appareil.')}persist()};
-$('m-lock').onclick=()=>{closeSheet();closeConv()};
+$('m-lock').onclick=()=>{closeSheet();lock?lockApp():closeConv()};
 $('m-delete').onclick=()=>{closeSheet();if(!confirm(`Supprimer « ${cur.rec.name} » et tout son historique de cet appareil ?`))return;convs=convs.filter(r=>r!==cur.rec);persist();closeConv()};
 $('m-pw').onclick=()=>{closeSheet();openForm('pw')};
 
@@ -517,9 +552,9 @@ $('f-go').onclick=async()=>{
 // ---------- Sans conversation (graver / lire une tablette isolée) ----------
 $('go-quick').onclick=()=>show('quick');
 $('q-back').onclick=()=>show('home');
-if(store.get('suse-pw')){$('pw').value=store.get('suse-pw');$('remember').checked=true}
-$('remember').onchange=()=>$('remember').checked?store.set('suse-pw',$('pw').value):store.del('suse-pw');
-$('pw').oninput=()=>{if($('remember').checked)store.set('suse-pw',$('pw').value)};
+function loadQuickPw(){$('pw').value=qpw||'';$('remember').checked=qpw!=null}
+$('remember').onchange=()=>{qpw=$('remember').checked?$('pw').value:null;persist()};
+$('pw').oninput=()=>{if($('remember').checked){qpw=$('pw').value;persist()}};
 $('msg').onfocus=()=>{const pw=$('pw').value;if(pw&&(!ready||ready.pw!==pw))prep(pw)};
 
 function tab(r){
@@ -564,7 +599,104 @@ $('read').onclick=read;
 $('clear').onclick=()=>{$('msg').value='';$('code').value='';$('result').hidden=true;$('tablet').hidden=true;lastCode='';status('')};
 $('code').addEventListener('paste',()=>setTimeout(()=>{if($('pw').value)read()},0));
 
-renderHome();
+// ---------- Verrouillage par Face ID ou code du téléphone (clé d'accès WebAuthn) ----------
+// suse-lock : {id, salt, prf}. Avec l'extension PRF (iOS 18+), la clé d'accès donne après Face ID un
+// secret d'où vient la clé AES du coffre suse-vault : verrouillée, l'appli ne peut rien lire.
+// Sans PRF, le verrou est seulement un écran devant des données restées comme avant.
+async function canLock(){
+  try{return !!(window.PublicKeyCredential&&await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable())}catch(e){return false}
+}
+async function keyFromPrf(secret){
+  const k=await crypto.subtle.importKey('raw',secret,'HKDF',false,['deriveKey']);
+  return crypto.subtle.deriveKey({name:'HKDF',hash:'SHA-256',salt:te.encode('suse-vault'),info:new Uint8Array()},k,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
+}
+// Demande Face ID (ou le code du téléphone). Renvoie la clé du coffre si le verrou est à clé PRF.
+async function faceId(l){
+  const a=await navigator.credentials.get({publicKey:{challenge:rand(32),timeout:60000,userVerification:'required',
+    allowCredentials:[{type:'public-key',id:unb64(l.id)}],extensions:l.prf?{prf:{eval:{first:unb64(l.salt)}}}:{}}});
+  if(!l.prf)return null;
+  const r=a.getClientExtensionResults().prf;
+  if(!r||!r.results||!r.results.first)throw new Error('prf');
+  return keyFromPrf(r.results.first);
+}
+async function enableLock(){
+  const salt=rand(32);
+  const c=await navigator.credentials.create({publicKey:{challenge:rand(32),timeout:60000,rp:{name:'Suse'},
+    user:{id:rand(16),name:'Suse',displayName:'Suse'},
+    pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],
+    authenticatorSelection:{authenticatorAttachment:'platform',residentKey:'preferred',userVerification:'required'},
+    extensions:{prf:{eval:{first:salt}}}}});
+  const ext=c.getClientExtensionResults().prf||{};
+  const l={id:b64(new Uint8Array(c.rawId)),salt:b64(salt),prf:false};
+  let key=null;
+  if(ext.results&&ext.results.first)key=await keyFromPrf(ext.results.first);
+  else if(ext.enabled){try{key=await faceId({...l,prf:true})}catch(e){}}
+  l.prf=!!key;lock=l;appKey=key;
+  store.set('suse-lock',JSON.stringify(l));
+  if(l.prf){
+    persist();await saving;
+    if(store.get('suse-vault')){store.del('suse-convs');store.del('suse-pw')}
+  }
+  return l.prf;
+}
+async function disableLock(){
+  await faceId(lock);
+  const wasPrf=lock.prf;lock=null;appKey=null;store.del('suse-lock');
+  if(persist()&&wasPrf)store.del('suse-vault');
+}
+function lockApp(){
+  if(!lock)return;
+  cur=null;ready=null;lastCode='';closeSheet();
+  ['c-msg','msg','code','pw','u-pw','f-pw','f-name'].forEach(id=>$(id).value='');
+  $('result').hidden=true;$('tablet').hidden=true;$('thread').innerHTML='';
+  if(lock.prf){convs=[];qpw=null;appKey=null}
+  show('lock');
+}
+async function unlockApp(){
+  try{
+    const key=await faceId(lock);
+    if(lock.prf){
+      const raw=store.get('suse-vault');let v={};
+      if(raw){const b=unb64(raw);v=JSON.parse(td.decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:b.slice(0,12)},key,b.slice(12))))}
+      appKey=key;convs=v.convs||[];qpw=v.qpw??null;
+    }
+    loadQuickPw();show('home');
+  }catch(e){status('Déverrouillage annulé.','err')}
+}
+async function refreshLockUI(){
+  $('lock-now').hidden=!lock;
+  $('lock-setup').hidden=!(lock||await canLock());
+  $('lock-setup').textContent=lock?'Désactiver le verrouillage Face ID':'Verrouiller avec Face ID';
+  $('lock-hint').hidden=!lock;
+  $('lock-hint').textContent=lock&&(lock.prf
+    ?'Verrouillage actif. Tant que Suse est verrouillée, tes conversations sont chiffrées par une clé que seul Face ID ou le code du téléphone débloque.'
+    :'Verrouillage actif. Ce téléphone ne permet pas de chiffrer avec Face ID (iOS 18 ou plus requis) : le verrou cache l’appli sans chiffrement supplémentaire.');
+}
+$('lock-setup').onclick=async()=>{
+  try{
+    if(lock){
+      if(!confirm('Désactiver le verrouillage Face ID ?'))return;
+      await disableLock();status('Verrouillage désactivé.');
+    }else{
+      if(!confirm('Suse va créer une clé d’accès protégée par Face ID. Si tu la supprimes un jour dans les réglages du téléphone (Mots de passe), tes conversations deviendront illisibles. Continuer ?'))return;
+      status(await enableLock()?'Verrouillage activé, avec chiffrement.':'Verrouillage activé.');
+    }
+  }catch(e){status('Opération annulée.','err')}
+  refreshLockUI();
+};
+$('lock-now').onclick=lockApp;
+$('lock-open').onclick=unlockApp;
+$('lock-sign').innerHTML=svg(0x07);
+// Verrouillage automatique après une minute en arrière-plan
+let hiddenAt=0;
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden)hiddenAt=Date.now();
+  else if(lock&&$('v-lock').hidden&&Date.now()-hiddenAt>60000)lockApp();
+});
+
+if(!lock||!lock.prf)loadPlain();
+if(lock)show('lock');else{loadQuickPw();renderHome()}
+refreshLockUI();
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 </script>
 </body>
