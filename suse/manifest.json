@@ -1,0 +1,15 @@
+{
+  "name": "Écriture de Suse",
+  "short_name": "Suse",
+  "description": "Messages chiffrés en AES-256, écrits en signes inspirés du proto-élamite.",
+  "lang": "fr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#ebe4d8",
+  "theme_color": "#1f3f8f",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
