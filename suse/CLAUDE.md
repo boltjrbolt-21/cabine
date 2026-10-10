@@ -15,9 +15,12 @@ et les afficher en signes inspirés de l'écriture proto-élamite (tablettes de 
 - Clé : PBKDF2-SHA256, 310 000 itérations, depuis le mot de passe.
 - Chaque octet → 2 quartets → 2 signes. 16 signes, ordre fixe :
   `○ ‖ ◇ ▣ △ ◈ ⊙ Ш T ☾ ⬡ ✱ 8 ⊓ ▽ Ψ` (index 0 à 15). Tableau `T` dans index.html.
-- Les dessins SVG des signes sont dans le tableau `G` (même ordre), viewBox 0 0 40 56 : traits de stylet
-  et empreintes (classe `dot`) d’après des formes proto-élamites. Rendu incisé : `svg()` dessine un liseré
-  `.hl` décalé sous le trait. Changer `G` ne casse rien ; changer `T` casserait toutes les tablettes.
+- Les dessins des signes sont décrits dans le tableau `S` (même ordre que `T`), repère 40 × 56 :
+  `w` traits de stylet (tête → pointe, rendus en coin effilé par `wedge()`), `o` empreintes rondes
+  profondes (nombres), `r` grands cercles. `G` est généré depuis `S`. Modèle : tablettes du Louvre
+  (J. L. Dahl, *Tablettes et fragments proto-élamites*) : traits droits, peu de courbes.
+  Rendu incisé : `svg()` dessine un liseré `.hl` décalé sous le signe.
+  Changer `S` ne casse rien ; changer `T` casserait toutes les tablettes.
 - Affichage de droite à gauche (`flex-direction: row-reverse`), comme les tablettes.
 
 ## Conversations (stockage local)
