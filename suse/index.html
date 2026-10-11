@@ -61,7 +61,9 @@ textarea{min-height:110px;resize:vertical}
 .status.err{background:var(--err);color:var(--bg)}
 .tablet{background:var(--clay);border:1px solid var(--clay-edge);border-radius:14px 10px 16px 9px;padding:14px 12px;
   box-shadow:inset 0 2px 0 rgba(255,255,255,.25),inset 0 -3px 6px rgba(0,0,0,.12)}
-.signs{display:flex;flex-direction:row-reverse;flex-wrap:wrap;gap:4px 3px;max-height:260px;overflow-y:auto}
+.signs{display:flex;flex-direction:row-reverse;flex-wrap:wrap;gap:8px 14px;max-height:300px;overflow-y:auto}
+.signs .entry{display:flex;flex-direction:row-reverse;align-items:center;gap:3px}
+svg.num{width:auto!important}
 .signs svg{width:28px;height:39px;color:var(--ink);flex:none}
 svg *{fill:none;stroke:currentColor;stroke-width:3.2;stroke-linecap:round;stroke-linejoin:round}
 svg .dot{fill:currentColor;stroke:none}
@@ -91,7 +93,8 @@ summary{cursor:pointer;font-weight:600}
 .msg .txt{white-space:pre-wrap;word-break:break-word}
 .msg .meta{font-size:11px;opacity:.7;margin-top:2px;text-align:right}
 .msg .tab{margin-top:8px;padding-top:8px;border-top:1px solid currentColor;display:flex;flex-direction:column;gap:8px;cursor:default}
-.msg .signs{max-height:150px;gap:2px}
+.msg .signs{max-height:170px;gap:5px 9px}
+.msg .signs .entry{gap:1px}
 .msg .signs svg{width:18px;height:25px;color:inherit}
 .msg.me svg .hl{display:none}
 .msg .tab button{font:inherit;font-size:13px;font-weight:600;padding:6px 10px;border-radius:8px;border:1px solid currentColor;background:transparent;color:inherit;cursor:pointer;align-self:flex-end}
@@ -119,7 +122,7 @@ summary{cursor:pointer;font-weight:600}
     <p class="hint" id="lock-hint" hidden></p>
     <details>
       <summary>Comment ça marche</summary>
-      <p>Chaque message est chiffré en AES-256-GCM avec une clé tirée du mot de passe de la conversation (PBKDF2, 310 000 itérations), puis gravé en signes inspirés du proto-élamite : 16 formes de base, chacune déclinée en 16 variantes, soit 256 signes faits de traits de stylet et empreintes rondes ou en coin, comme sur les tablettes de Suse (dessins stylisés, pas des copies exactes). Le texte envoyé utilise des caractères ordinaires (○ ‖ ◇…), seuls lisibles par tous les téléphones. Le même message donne une tablette différente à chaque fois.</p>
+      <p>Chaque message est chiffré en AES-256-GCM avec une clé tirée du mot de passe de la conversation (PBKDF2, 310 000 itérations), puis gravé en signes inspirés du proto-élamite : 16 formes de base, chacune déclinée en 16 variantes, soit 256 signes faits de traits de stylet. Comme dans les comptes proto-élamites, la tablette se lit en entrées « objet + nombre » : un à trois signes, puis une quantité en empreintes, en système décimal (coin = 1, trou = 10, cercle = 100) ou sexagésimal (grand coin couché = 60) et empreintes rondes ou en coin, comme sur les tablettes de Suse (dessins stylisés, pas des copies exactes). Le texte envoyé utilise des caractères ordinaires (○ ‖ ◇…), seuls lisibles par tous les téléphones. Le même message donne une tablette différente à chaque fois.</p>
       <p>Les tablettes voyagent par WhatsApp, SMS ou autre : graver copie la tablette, « Coller » ajoute celle que tu as reçue. L’historique reste sur ce téléphone, chiffré avec le même mot de passe. Rien n’est envoyé à un serveur.</p>
       <p>Choisis un mot de passe d’au moins 4 mots au hasard, et donne-le à ton contact de vive voix.</p>
       <div class="legend" id="legend"></div>
@@ -303,10 +306,44 @@ function sign(b){
 }
 // Deux passes : un liseré clair décalé puis le trait sombre, pour l’effet d’incision
 const G=S.map(ext);
-const svgOf=inner=>`<svg viewBox="0 0 40 56" aria-hidden="true"><g class="hl" transform="translate(.9 1.2)">${inner}</g><g>${inner}</g></svg>`;
+const svgOf=(inner,w=40,cls='')=>`<svg viewBox="0 0 ${w} 56"${cls&&` class="${cls}"`} aria-hidden="true"><g class="hl" transform="translate(.9 1.2)">${inner}</g><g>${inner}</g></svg>`;
 const svg=b=>svgOf(sign(b));
 // Quartets (0–15) → signes affichés, deux par deux
-const signsOf=n=>{let h='';for(let i=0;i+1<n.length;i+=2)h+=svg(n[i]<<4|n[i+1]);return h};
+// Nombre en empreintes, rangées en colonnes, unités les plus grosses à droite (lecture de droite à gauche).
+// Décimal (propre au proto-élamite, pour compter les travailleurs) : coin = 1, trou = 10, cercle = 100.
+// Sexagésimal : coin = 1, trou = 10, grand coin couché = 60.
+function numeral(v,sexa){
+  const big=sexa?60:100;
+  const groups=[[v%10,'coin'],[Math.floor(v%big/10),'trou'],[Math.floor(v/big),'grand']].filter(g=>g[0]);
+  if(!groups.length)return '';
+  let x=2,inner='';
+  for(const [n,k] of groups){
+    const rows=k==='grand'?2:3,cw=k==='grand'?20:12;
+    for(let i=0;i<n;i++){
+      const cx=x+cw*Math.floor(i/rows)+cw/2,r=i%rows;
+      if(k==='coin')inner+=wedge([cx,6+r*16,cx,18+r*16]);
+      else if(k==='trou')inner+=`<circle class="dot" cx="${cx}" cy="${12+r*16}" r="4.2"/>`;
+      else if(sexa)inner+=`<path class="dot" d="M${cx+9} ${16+r*24} L${cx-9} ${10+r*24} L${cx-9} ${22+r*24} Z"/>`;
+      else inner+=`<circle class="ring" cx="${cx}" cy="${16+r*24}" r="8"/>`;
+    }
+    x+=cw*Math.ceil(n/rows)+3;
+  }
+  return svgOf(inner,x-1,'num');
+}
+// Mise en page en entrées « OBJET + NOMBRE », comme les comptes proto-élamites : un à trois signes
+// (le bit faible d'un signe annonce le suivant), puis un octet écrit en nombre. Le système (décimal ou
+// sexagésimal) dépend du premier signe. Purement visuel et déterministe ; le déchiffrement lit le texte.
+function signsOf(n){
+  const b=[];for(let i=0;i+1<n.length;i+=2)b.push(n[i]<<4|n[i+1]);
+  let h='',i=0;
+  while(i<b.length){
+    const objs=[b[i++]];
+    while(i<b.length&&objs.length<3&&(objs[objs.length-1]&1))objs.push(b[i++]);
+    const num=i<b.length?numeral(b[i++],!!(objs[0]&2)):'';
+    h+=`<span class="entry">${objs.map(svg).join('')}${num}</span>`;
+  }
+  return h;
+}
 const $=id=>document.getElementById(id);
 const te=new TextEncoder(),td=new TextDecoder();
 const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v);return true}catch(e){return false}},del(k){try{localStorage.removeItem(k)}catch(e){}}};

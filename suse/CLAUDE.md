@@ -23,6 +23,10 @@ et les afficher en signes inspirés de l'écriture proto-élamite (tablettes de 
 - Affichage : un signe par octet (paire de quartets), soit 256 signes. Quartet fort → forme de base `G`,
   quartet faible → variante `M` (pivotée, encadrée, redoublée, empreintes ou traits ajoutés). Voir `sign()`
   et `signsOf()`. Purement visuel : seul le texte en caractères `T` sert au déchiffrement.
+- Mise en page en entrées « OBJET + NOMBRE » (`signsOf()`) : 1 à 3 signes (bit faible = un signe suit),
+  puis l'octet suivant écrit en nombre par `numeral()` : décimal (coin 1, trou 10, cercle 100) ou
+  sexagésimal (grand coin couché 60), selon le bit 1 du premier signe. Aucun module externe : le
+  « proto_elamite_parser » Python évoqué un jour n'existe pas (absent de PyPI).
   Changer `S` ne casse rien ; changer `T` casserait toutes les tablettes.
 - Affichage de droite à gauche (`flex-direction: row-reverse`), comme les tablettes.
 
