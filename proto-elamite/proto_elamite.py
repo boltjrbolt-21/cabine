@@ -32,6 +32,25 @@ OBJET_SYSTEME = {}
 
 NUMERAL = re.compile(r'^(\d+)\((N\d+[a-z]?)\)$')
 NUMERO_LIGNE = re.compile(r"^[a-z]?\s*\d+[a-z']*\.\s*")
+SIGNE_COURT = re.compile(r'^M(\d{1,2})(?=\D|$)')
+
+
+def normaliser(signe):
+    """M36 → M036 : le CDLI numérote les signes sur trois chiffres."""
+    return SIGNE_COURT.sub(lambda m: 'M' + m.group(1).zfill(3), signe)
+
+
+def jetons(corps):
+    """Découpe une ligne ; « M260~a+1(N24) » donne l'objet M260~a puis le numéral 1(N24)."""
+    for brut in corps.replace(',', ' ').split():
+        if brut.startswith('|'):
+            yield brut  # signe composé |…+…| : un seul objet
+            continue
+        parts = brut.split('+')
+        if len(parts) > 1 and any(NUMERAL.match(nettoyer(x)[0]) for x in parts):
+            yield from (x for x in parts if x)
+        else:
+            yield brut
 
 
 @dataclass
@@ -73,7 +92,7 @@ def analyser_ligne(texte, num=0):
     """Découpe une ligne de texte en entrées « objets + nombre »."""
     corps = NUMERO_LIGNE.sub('', texte.strip())
     entrees, cur = [], None
-    for brut in corps.replace(',', ' ').split():
+    for brut in jetons(corps):
         jeton, abime = nettoyer(brut)
         if not jeton or jeton == '...':
             if cur:
@@ -88,7 +107,7 @@ def analyser_ligne(texte, num=0):
         if m:
             cur.numeraux.append((int(m.group(1)), m.group(2)))
         else:
-            cur.objets.append(jeton)
+            cur.objets.append(normaliser(jeton))
     for e in entrees:
         e.valeurs = valeurs(e.numeraux)
         connus = set().union(*SYSTEMES.values())

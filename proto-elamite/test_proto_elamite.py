@@ -53,6 +53,13 @@ class Tests(unittest.TestCase):
         finally:
             pe.OBJET_SYSTEME.clear()
 
+    def test_normalisation_et_numeral_colle(self):
+        e = pe.analyser_ligne('1. M001@f M260~a+1(N24) 1(N39a)')[0]
+        self.assertEqual(e.objets, ['M001@f', 'M260~a'])
+        self.assertEqual(e.numeraux, [(1, 'N24'), (1, 'N39a')])
+        self.assertEqual(pe.analyser_ligne('2. M36 2(N01)')[0].objets, ['M036'])
+        self.assertEqual(pe.analyser_ligne('3. |M218+M036| 1(N01)')[0].objets, ['|M218+M036|'])
+
 
 if __name__ == '__main__':
     unittest.main()
