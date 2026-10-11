@@ -53,13 +53,26 @@ class Tests(unittest.TestCase):
         finally:
             pe.OBJET_SYSTEME.clear()
 
-    def test_normalisation_et_numeral_colle(self):
-        e = pe.analyser_ligne('1. M001@f M260~a+1(N24) 1(N39a)')[0]
-        self.assertEqual(e.objets, ['M001@f', 'M260~a'])
-        self.assertEqual(e.numeraux, [(1, 'N24'), (1, 'N39a')])
-        self.assertEqual(pe.analyser_ligne('2. M36 2(N01)')[0].objets, ['M036'])
-        self.assertEqual(pe.analyser_ligne('3. |M218+M036| 1(N01)')[0].objets, ['|M218+M036|'])
+    def test_virgule_et_signe_qualifie(self):
+        e = pe.analyser_ligne('12. M36+1(N30d) , 1(N54)')[0]
+        self.assertEqual(e.objets, ['M036+1(N30d)'])
+        self.assertEqual(e.numeraux, [(1, 'N54')])
+        e = pe.analyser_ligne('10. M328b [...] M36+1(N30c) , 1(N34)')[0]
+        self.assertEqual(e.objets, ['M328b', 'M036+1(N30c)'])
+        self.assertTrue(e.abime)
 
+    def test_cassure_en_debut_de_ligne(self):
+        e = pe.analyser_ligne('01. [...] , [...] 4(N39b) 1(N24)')[0]
+        self.assertTrue(e.abime)
+        self.assertEqual(e.objets, [])
+        self.assertEqual(e.numeraux, [(4, 'N39b'), (1, 'N24')])
+
+    def test_normalisation(self):
+        self.assertEqual(pe.analyser_ligne('2. M36+M343h M02b , 2(N01)')[0].objets, ['M036+M343h', 'M002b'])
+
+    def test_totaux(self):
+        t = pe.analyser_atf('&P1\n1. M288 , 2(N01)\n2. M288 , 3(N01) 1(N24)')[0]
+        self.assertEqual(pe.totaux_par_numeral(t), {'N01': 5, 'N24': 1})
 
 if __name__ == '__main__':
     unittest.main()

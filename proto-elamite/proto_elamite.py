@@ -26,37 +26,26 @@ SYSTEMES = {
     'D': {'N01': 1, 'N14': 10, 'N34': 100, 'N45': 1000, 'N48': 10000},  # décimal
 }
 NOMS = {'S': 'sexagésimal', 'D': 'décimal'}
+FACES = {'obverse': 'o', 'reverse': 'r', 'left': 'g', 'right': 'd', 'top': 'h', 'bottom': 'b', 'edge': 'tr'}
 
 # Système imposé par l'objet compté, quand on le connaît : {'M388': 'D', ...}.
 OBJET_SYSTEME = {}
 
 NUMERAL = re.compile(r'^(\d+)\((N\d+[a-z]?)\)$')
 NUMERO_LIGNE = re.compile(r"^[a-z]?\s*\d+[a-z']*\.\s*")
-SIGNE_COURT = re.compile(r'^M(\d{1,2})(?=\D|$)')
+SIGNE_COURT = re.compile(r'(?<![\w(])M(\d{1,2})(?!\d)')
 
 
 def normaliser(signe):
-    """M36 → M036 : le CDLI numérote les signes sur trois chiffres."""
+    """M36 → M036, M36+M343h → M036+M343h : le CDLI numérote les signes sur trois chiffres."""
     return SIGNE_COURT.sub(lambda m: 'M' + m.group(1).zfill(3), signe)
-
-
-def jetons(corps):
-    """Découpe une ligne ; « M260~a+1(N24) » donne l'objet M260~a puis le numéral 1(N24)."""
-    for brut in corps.replace(',', ' ').split():
-        if brut.startswith('|'):
-            yield brut  # signe composé |…+…| : un seul objet
-            continue
-        parts = brut.split('+')
-        if len(parts) > 1 and any(NUMERAL.match(nettoyer(x)[0]) for x in parts):
-            yield from (x for x in parts if x)
-        else:
-            yield brut
 
 
 @dataclass
 class Entree:
     ligne: int
     texte: str
+    ref: str = ''                                  # face + numéro, ex. « o 03 »
     objets: list = field(default_factory=list)
     numeraux: list = field(default_factory=list)   # [(nombre, signe), ...]
     valeurs: dict = field(default_factory=dict)    # {'S': 32, 'D': 32}
@@ -89,22 +78,39 @@ def valeurs(numeraux):
 
 
 def analyser_ligne(texte, num=0):
-    """Découpe une ligne de texte en entrées « objets + nombre »."""
+    """Découpe une ligne en entrées « objets , nombre ».
+
+    Dans les translittérations du CDLI, la virgule sépare les signes de la notation
+    numérique. Un numéral collé à un signe par « + » (M36+1(N30d)) fait partie du
+    signe : c'est une précision sur l'objet, pas la quantité. Sans virgule, chaque
+    numéral isolé est compté et un signe qui suit des numéraux ouvre une nouvelle entrée.
+    """
     corps = NUMERO_LIGNE.sub('', texte.strip())
-    entrees, cur = [], None
-    for brut in jetons(corps):
+    virgule = ',' in corps
+    entrees, cur, apres, abime_avant = [], None, False, False
+    for brut in corps.replace(',', ' , ').split():
+        if brut == ',':
+            apres = True
+            continue
         jeton, abime = nettoyer(brut)
         if not jeton or jeton == '...':
             if cur:
                 cur.abime = True
+            else:
+                abime_avant = True
             continue
         m = NUMERAL.match(jeton)
-        # Un objet qui suit des numéraux ouvre une nouvelle entrée.
-        if cur is None or (not m and cur.numeraux):
-            cur = Entree(ligne=num, texte=texte.strip())
+        est_nombre = bool(m) and (apres or not virgule)
+        if apres and not est_nombre:
+            if cur:
+                cur.abime |= abime
+            continue  # après la virgule, seul compte le nombre
+        if cur is None or (not est_nombre and cur.numeraux):
+            cur = Entree(ligne=num, texte=texte.strip(), abime=abime_avant)
+            abime_avant = False
             entrees.append(cur)
         cur.abime |= abime
-        if m:
+        if est_nombre:
             cur.numeraux.append((int(m.group(1)), m.group(2)))
         else:
             cur.objets.append(normaliser(jeton))
@@ -120,21 +126,36 @@ def analyser_ligne(texte, num=0):
 
 def analyser_atf(texte):
     """Lit un fichier ATF (une ou plusieurs tablettes) et renvoie la liste des tablettes."""
-    tablettes, cur = [], None
+    tablettes, cur, face = [], None, ''
     for i, ligne in enumerate(texte.splitlines(), 1):
         s = ligne.strip()
         if s.startswith('&'):
             ident, _, nom = s[1:].partition('=')
-            cur = Tablette(id=ident.strip(), nom=nom.strip())
+            cur, face = Tablette(id=ident.strip(), nom=nom.strip()), ''
             tablettes.append(cur)
-        elif not s or s[0] in '#@$>':
-            continue  # commentaires, structure (@obverse…), états ($ broken), liens
+        elif s.startswith('@'):
+            face = FACES.get(s[1:].split()[0], face)
+        elif not s or s[0] in '#$>':
+            continue  # commentaires, états ($ broken), liens
         else:
             if cur is None:
-                cur = Tablette(id='(sans identifiant)')
+                cur, face = Tablette(id='(sans identifiant)'), ''
                 tablettes.append(cur)
-            cur.entrees.extend(analyser_ligne(s, i))
+            num = NUMERO_LIGNE.match(s)
+            ref = (face + ' ' + num.group(0).strip().rstrip('.')).strip() if num else f'l.{i}'
+            for e in analyser_ligne(s, i):
+                e.ref = ref
+                cur.entrees.append(e)
     return tablettes
+
+
+def totaux_par_numeral(tablette):
+    """Somme de chaque numéral sur la tablette, sans avoir besoin de connaître sa valeur."""
+    tot = {}
+    for e in tablette.entrees:
+        for n, sig in e.numeraux:
+            tot[sig] = tot.get(sig, 0) + n
+    return dict(sorted(tot.items()))
 
 
 def notation(numeraux):
@@ -156,9 +177,12 @@ def rapport(tablettes):
                 qte = (f'{vs[0]} (sexagésimal ou décimal)' if len(vs) == 1 else
                        ' ou '.join(f'{v} ({NOMS[k]})' for k, v in e.valeurs.items()))
             else:
-                qte = 'système non géré : ' + ', '.join(e.inconnus)
+                qte = 'valeur non calculée (' + ', '.join(e.inconnus) + ')'
             marque = ' [abîmé]' if e.abime else ''
-            out.append(f'  l.{e.ligne:<4} {objets:<24} {notation(e.numeraux):<22} → {qte}{marque}')
+            out.append(f'  {e.ref or e.ligne:<6} {objets:<30} {notation(e.numeraux):<22} → {qte}{marque}')
+        totaux = totaux_par_numeral(t)
+        if totaux:
+            out.append('  Total par numéral : ' + ' '.join(f'{n}({s})' for s, n in totaux.items()))
     return '\n'.join(out)
 
 
