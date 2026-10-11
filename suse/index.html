@@ -427,8 +427,62 @@ async function unseal(text,pw){
   if(n.length%2)throw 0;
   const b=new Uint8Array(n.length/2);for(let i=0;i<b.length;i++)b[i]=(n[2*i]<<4)|n[2*i+1];
   if(b[0]!==1||b.length<46)throw 0;
-  const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:b.slice(17,29)},await derive(pw,b.slice(1,17)),b.slice(29));
+  const key=await derive(pw,b.slice(1,17));
+  let pt;try{pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:b.slice(17,29)},key,b.slice(29))}
+  catch(e){throw {n,len:b.length-45}}  // tablette valide, mauvais mot de passe
   return {n,msg:td.decode(pt)};
+}
+
+// ---------- Leurre : fausse traduction quand le mot de passe est faux ----------
+// Même tablette + même mot de passe → toujours le même faux message, d'une longueur proche
+// du vrai (la taille du message se voit sur la tablette). Le temps de calcul est le même.
+const LEURRE={
+  P:['Karim','Léa','Mehdi','Sofia','Yanis','Inès','Hugo','Nora','Bilal','Camille','Rayan','Jade','Moussa','Clara'],
+  J:['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche','demain','ce soir','après-demain'],
+  L:['à la gare','devant la pharmacie','au parking du supermarché','au square','derrière le stade',
+     'à la sortie du métro','au bout du quai 3','au tabac','devant la poste','au rond-point','chez sa tante'],
+  F:['Ok.','Oui.','Bien.','Merci.','Promis.','Parfait.','Compris.','Toujours.','Attention.']
+};
+async function leurre(code,pw,len){
+  const h=new Uint8Array(await crypto.subtle.digest('SHA-256',te.encode('leurre\n'+code+'\n'+pw)));
+  let s=(h[0]|h[1]<<8|h[2]<<16|h[3]<<24)>>>0;
+  const r=()=>{s=(s+0x6D2B79F5)>>>0;let t=s;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296};
+  const p=a=>a[Math.floor(r()*a.length)],n=(a,b)=>a+Math.floor(r()*(b-a+1));
+  const H=()=>n(7,23)+'h'+p(['','','15','30','45']);
+  const phrases=[
+    ()=>`Rendez-vous ${p(LEURRE.J)} à ${H()} ${p(LEURRE.L)}.`,
+    ()=>`${p(LEURRE.P)} a confirmé pour ${p(LEURRE.J)}.`,
+    ()=>`Pas avant ${H()}, ${p(LEURRE.P)} sera là.`,
+    ()=>`C'est reporté à ${p(LEURRE.J)}.`,
+    ()=>`Prends la ligne ${n(2,14)}, descends au ${n(3,9)}e arrêt.`,
+    ()=>`Le code c'est ${n(1000,9999)}.`,
+    ()=>`Dis à ${p(LEURRE.P)} de passer ${p(LEURRE.L)}.`,
+    ()=>`On change : ${p(LEURRE.L)}, ${H()}.`,
+    ()=>`Tout est prêt, attends mon signal.`,
+    ()=>`${p(LEURRE.P)} ne doit pas savoir.`,
+    ()=>`Je t'appelle ${p(LEURRE.J)} vers ${H()}.`,
+    ()=>`Garde la clé, je la récupère ${p(LEURRE.J)}.`,
+    ()=>`${p(LEURRE.P)} et ${p(LEURRE.P)} seront ${p(LEURRE.L)} à ${H()}.`,
+    ()=>`${p(LEURRE.J)} ${H()}.`.replace(/^./,c=>c.toUpperCase()),
+    ()=>`Ok pour ${p(LEURRE.J)}.`,
+    ()=>`Pas ${p(LEURRE.J)}.`,
+    ()=>`Appelle ${p(LEURRE.P)}.`,
+    ()=>`${p(LEURRE.L)}.`.replace(/^./,c=>c.toUpperCase()),
+    ()=>`Vu avec ${p(LEURRE.P)}.`,
+    ()=>`Plutôt ${H()}.`,
+    ()=>`C'est bon pour moi.`,
+    ()=>`Efface après lecture.`
+  ];
+  const size=t=>te.encode(t).length,add=(t,x)=>t?t+' '+x:x;
+  let t='';
+  let reste=[];  // chaque modèle une fois avant de resservir, sinon le leurre se répète
+  for(let essais=0;essais<60;essais++){
+    if(!reste.length)reste=phrases.slice();
+    const i=Math.floor(r()*reste.length),x=reste[i]();
+    if(size(add(t,x))<=len){t=add(t,x);reste.splice(i,1)}
+  }
+  for(let essais=0;essais<20;essais++){const x=p(LEURRE.F);if(size(add(t,x))<=len)t=add(t,x)}
+  return t||'Ok'.slice(0,Math.max(1,len));
 }
 const toCode=n=>n.map(v=>T[v]).join('');
 async function copy(p){
@@ -563,13 +617,19 @@ async function receive(raw){
   const c=clean(raw||'');if(!c)return;
   if(cur.msgs.some(m=>m.code===c))return status('Ce message est déjà dans la conversation.');
   status('Lecture…');
-  try{
-    const r=await unseal(c,cur.pw);
-    cur.msgs.push({me:0,t:Date.now(),text:r.msg,code:c});
-    await writeHistory();renderThread();status('Message reçu.');
-  }catch(e){
-    status(isTablet(c)?'Cette tablette n’a pas été gravée avec le mot de passe de cette conversation.':'Ce texte n’est pas une tablette complète.','err');
+  let text;
+  try{text=(await unseal(c,cur.pw)).msg}
+  catch(e){
+    if(!e||!e.n)return status('Ce texte n’est pas une tablette complète.','err');
+    // Collée dans la mauvaise conversation ? On le dit seulement si une autre conversation de ce
+    // téléphone (mot de passe mémorisé) la lit vraiment. Sinon : fausse traduction.
+    for(const r of convs)if(r!==cur.rec&&r.pw){
+      try{await unseal(c,r.pw);return status(`Cette tablette appartient à la conversation « ${r.name} ».`,'err')}catch(x){}
+    }
+    text=await leurre(c,cur.pw,e.len);
   }
+  cur.msgs.push({me:0,t:Date.now(),text,code:c});
+  await writeHistory();renderThread();status('Message reçu.');
 }
 $('c-paste').onclick=async()=>{
   let t;try{t=await navigator.clipboard.readText()}catch(e){t=prompt('Colle ici la tablette reçue :')}
@@ -668,8 +728,13 @@ async function read(){
   if(!c.trim())return status('Colle d’abord une tablette.','err');
   if(!pw)return status('Entre le mot de passe.','err');
   status('Lecture…');$('result').hidden=true;
-  try{const r=await unseal(c,pw);showSigns(r.n);$('result').textContent=r.msg;$('result').hidden=false;status('Message déchiffré.')}
-  catch(e){status('Lecture impossible : mauvais mot de passe, ou tablette incomplète.','err')}
+  let r;
+  try{r=await unseal(c,pw)}
+  catch(e){
+    if(!e||!e.n)return status('Ce texte n’est pas une tablette complète.','err');
+    r={n:e.n,msg:await leurre(clean(c),pw,e.len)};  // mauvais mot de passe : fausse traduction
+  }
+  showSigns(r.n);$('result').textContent=r.msg;$('result').hidden=false;status('Message déchiffré.');
 }
 $('read').onclick=read;
 $('clear').onclick=()=>{$('msg').value='';$('code').value='';$('result').hidden=true;$('tablet').hidden=true;lastCode='';status('')};

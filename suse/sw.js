@@ -1,4 +1,4 @@
-const CACHE = 'suse-v8';
+const CACHE = 'suse-v9';
 const FILES = ['./', 'index.html', 'manifest.json', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {

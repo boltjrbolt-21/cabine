@@ -47,6 +47,18 @@ et les afficher en signes inspirés de l'écriture proto-élamite (tablettes de 
 - La clé de la tablette suivante est dérivée à l'avance (`prep`) pour que copie et partage gardent le
   geste utilisateur exigé par Safari.
 
+## Leurre (fausse traduction)
+- Tablette valide + mauvais mot de passe : `unseal()` lève `{n, len}` et l'appli affiche `leurre()` au lieu
+  d'une erreur, dans « Lire » comme dans une conversation (message ajouté au fil). Statut identique au vrai.
+- `leurre()` : faux message en français (rendez-vous, heures, prénoms, lieux, codes…) tiré d'un PRNG
+  amorcé par SHA-256(tablette + mot de passe) → même essai, même faux texte. Longueur en octets ≤ celle du
+  vrai message (visible sur la tablette) et proche. Le PBKDF2 est calculé dans les deux cas (même durée).
+- Conversation : si une autre conversation au mot de passe mémorisé lit la tablette, on le dit
+  (« appartient à la conversation… ») au lieu de leurrer le propriétaire.
+- Erreurs restantes : texte qui n'est pas une tablette (signes hors `T`, longueur impaire, trop court).
+- Rien dans l'interface ne mentionne le leurre. Limite : quelqu'un qui lit le code source sait que l'échec
+  du tag AES-GCM trahit le mauvais mot de passe ; le leurre trompe ceux qui passent par l'appli.
+
 ## Verrouillage Face ID (optionnel)
 - Clé d'accès WebAuthn (plateforme, vérification obligatoire → Face ID ou code du téléphone).
   localStorage `suse-lock` : `{id, salt, prf}`.
