@@ -64,6 +64,9 @@ textarea{min-height:110px;resize:vertical}
 .signs{display:flex;flex-direction:row-reverse;flex-wrap:wrap;gap:8px 14px;max-height:300px;overflow-y:auto}
 .signs .entry{display:flex;flex-direction:row-reverse;align-items:center;gap:3px}
 svg.num{width:auto!important}
+.signs .br{flex-basis:100%;height:0}
+.signs .revers{height:0;margin:6px 0;border-top:1.5px dashed currentColor;opacity:.35}
+.signs .tete svg{width:34px;height:47px}
 .signs svg{width:28px;height:39px;color:var(--ink);flex:none}
 svg *{fill:none;stroke:currentColor;stroke-width:3.2;stroke-linecap:round;stroke-linejoin:round}
 svg .dot{fill:currentColor;stroke:none}
@@ -122,7 +125,7 @@ summary{cursor:pointer;font-weight:600}
     <p class="hint" id="lock-hint" hidden></p>
     <details>
       <summary>Comment ça marche</summary>
-      <p>Chaque message est chiffré en AES-256-GCM avec une clé tirée du mot de passe de la conversation (PBKDF2, 310 000 itérations), puis gravé en signes inspirés du proto-élamite : 16 formes de base, chacune déclinée en 16 variantes, soit 256 signes faits de traits de stylet. Comme dans les comptes proto-élamites, la tablette se lit en entrées « objet + nombre » : un à trois signes, puis une quantité en empreintes, en système décimal (coin = 1, trou = 10, cercle = 100) ou sexagésimal (grand coin couché = 60) et empreintes rondes ou en coin, comme sur les tablettes de Suse (dessins stylisés, pas des copies exactes). Le texte envoyé utilise des caractères ordinaires (○ ‖ ◇…), seuls lisibles par tous les téléphones. Le même message donne une tablette différente à chaque fois.</p>
+      <p>Chaque message est chiffré en AES-256-GCM avec une clé tirée du mot de passe de la conversation (PBKDF2, 310 000 itérations), puis gravé en signes inspirés du proto-élamite : 16 formes de base, chacune déclinée en 16 variantes, soit 256 signes faits de traits de stylet. Comme sur la tablette MDP 17, 77+212+226 du Louvre, la tablette commence par un en-tête sans nombre, puis des entrées « objet + nombre » : un à trois signes (parfois composés ou précisés par une petite fraction), puis une quantité en empreintes, le plus souvent en mesures de grain (fractions en coins barrés, en V ou obliques), sinon en décimal (coin 1, trou 10, cercle 100) ou en sexagésimal (grand coin couché 60). Au revers, après le trait, les totaux de chaque système et empreintes rondes ou en coin, comme sur les tablettes de Suse (dessins stylisés, pas des copies exactes). Le texte envoyé utilise des caractères ordinaires (○ ‖ ◇…), seuls lisibles par tous les téléphones. Le même message donne une tablette différente à chaque fois.</p>
       <p>Les tablettes voyagent par WhatsApp, SMS ou autre : graver copie la tablette, « Coller » ajoute celle que tu as reçue. L’historique reste sur ce téléphone, chiffré avec le même mot de passe. Rien n’est envoyé à un serveur.</p>
       <p>Choisis un mot de passe d’au moins 4 mots au hasard, et donne-le à ton contact de vive voix.</p>
       <div class="legend" id="legend"></div>
@@ -294,7 +297,7 @@ const M=[ // [placement de la forme de base, éléments ajoutés]
   [at(5.6,15),{w:[[20,2,7,12],[20,2,33,12]]}],                                  // chapeau
   ['translate(20 22) rotate(90) scale(.62) translate(-20 -28)',{o:[[20,47,4]]}],// pivotée, empreinte dessous
   [at(5.6,0),{r:[[20,49,5]]}],                                                  // cercle dessous
-  [at(11,8),{o:[[5,18,3.2],[5,38,3.2]]}],                                       // deux empreintes à gauche
+  [at(11,4),{w:[[1,40,5,51],[9,40,5,51]]}],                                      // précisée par une fraction (M36+1(N30d))
   [at(5.6,15),{w:[[13,2,27,13],[27,2,13,13]]}],                                 // croix au-dessus
   ['',null],                                                                    // redoublée
   [at(0,8),{w:[[32,12,38,22],[32,24,38,34],[32,36,38,46]]}],                    // traits obliques à droite
@@ -309,39 +312,75 @@ const G=S.map(ext);
 const svgOf=(inner,w=40,cls='')=>`<svg viewBox="0 0 ${w} 56"${cls&&` class="${cls}"`} aria-hidden="true"><g class="hl" transform="translate(.9 1.2)">${inner}</g><g>${inner}</g></svg>`;
 const svg=b=>svgOf(sign(b));
 // Quartets (0–15) → signes affichés, deux par deux
+// ---------- Mise en page d'une tablette, d'après les comptes proto-élamites ----------
+// Exemple réel étudié : MDP 17, 77+212+226 (CDLI) : un en-tête sans nombre, puis des entrées
+// « signes , nombre », surtout en mesures de grain (fractions N39b, N24, N30c), des signes précisés
+// par une petite fraction (M36+1(N30d)), des signes composés (M327+M342), et des totaux au revers.
+// Tout est stylisé et purement visuel : le déchiffrement ne lit que le texte en caractères de `T`.
+
+// Systèmes numériques : [valeur, empreinte], du plus grand au plus petit.
+// D décimal (propre au proto-élamite, pour les travailleurs), S sexagésimal, C capacité (grain).
+// Les rapports entre fractions de C sont ceux de Suse, pas une reconstitution savante.
+const SYS={
+  D:[[1000,'cerclepoint'],[100,'cercle'],[10,'trou'],[1,'coin']],
+  S:[[3600,'doublecercle'],[600,'grandcointrou'],[60,'grandcoin'],[10,'trou'],[1,'coin']],
+  C:[[3200,'cercle'],[320,'trou'],[32,'coin'],[8,'n39b'],[2,'n24'],[1,'n30c']]
+};
+// Taille des empreintes : [lignes par colonne, largeur de colonne]
+const GRANDES={cercle:1,cerclepoint:1,doublecercle:1,grandcoin:1,grandcointrou:1};
+function mark(k,cx,cy){
+  switch(k){
+    case 'coin':return wedge([cx,cy-6,cx,cy+6]);
+    case 'trou':return `<circle class="dot" cx="${cx}" cy="${cy}" r="4.2"/>`;
+    case 'n39b':return wedge([cx,cy-6,cx,cy+6])+wedge([cx-5,cy,cx+4,cy]);            // coin barré
+    case 'n24':return wedge([cx-5,cy-6,cx,cy+5])+wedge([cx+5,cy-6,cx,cy+5]);          // deux coins en V
+    case 'n30c':return wedge([cx-4,cy-5,cx+4,cy+5]);                                  // petit coin oblique
+    case 'cercle':return `<circle class="ring" cx="${cx}" cy="${cy}" r="8"/>`;
+    case 'cerclepoint':return `<circle class="ring" cx="${cx}" cy="${cy}" r="9"/><circle class="dot" cx="${cx}" cy="${cy}" r="3.2"/>`;
+    case 'doublecercle':return `<circle class="ring" cx="${cx}" cy="${cy}" r="9.5"/><circle class="ring" cx="${cx}" cy="${cy}" r="4.5"/>`;
+    case 'grandcoin':return `<path class="dot" d="M${cx+9} ${cy} L${cx-9} ${cy-6} L${cx-9} ${cy+6} Z"/>`;
+    case 'grandcointrou':return `<path class="dot" d="M${cx+9} ${cy} L${cx-9} ${cy-6} L${cx-9} ${cy+6} Z"/><circle class="dot" cx="${cx-14}" cy="${cy}" r="3.2"/>`;
+  }
+  return '';
+}
 // Nombre en empreintes, rangées en colonnes, unités les plus grosses à droite (lecture de droite à gauche).
-// Décimal (propre au proto-élamite, pour compter les travailleurs) : coin = 1, trou = 10, cercle = 100.
-// Sexagésimal : coin = 1, trou = 10, grand coin couché = 60.
-function numeral(v,sexa){
-  const big=sexa?60:100;
-  const groups=[[v%10,'coin'],[Math.floor(v%big/10),'trou'],[Math.floor(v/big),'grand']].filter(g=>g[0]);
+function numeral(v,sys){
+  const groups=[];
+  for(const [u,k] of SYS[sys]){const n=Math.floor(v/u);v%=u;if(n)groups.unshift([n,k])}
   if(!groups.length)return '';
   let x=2,inner='';
   for(const [n,k] of groups){
-    const rows=k==='grand'?2:3,cw=k==='grand'?20:12;
+    const big=GRANDES[k],rows=big?2:3,cw=k==='grandcointrou'?30:big?22:12;
     for(let i=0;i<n;i++){
-      const cx=x+cw*Math.floor(i/rows)+cw/2,r=i%rows;
-      if(k==='coin')inner+=wedge([cx,6+r*16,cx,18+r*16]);
-      else if(k==='trou')inner+=`<circle class="dot" cx="${cx}" cy="${12+r*16}" r="4.2"/>`;
-      else if(sexa)inner+=`<path class="dot" d="M${cx+9} ${16+r*24} L${cx-9} ${10+r*24} L${cx-9} ${22+r*24} Z"/>`;
-      else inner+=`<circle class="ring" cx="${cx}" cy="${16+r*24}" r="8"/>`;
+      const r=i%rows,cx=x+cw*Math.floor(i/rows)+(k==='grandcointrou'?19:cw/2);
+      inner+=mark(k,cx,big?16+r*24:12+r*16);
     }
     x+=cw*Math.ceil(n/rows)+3;
   }
   return svgOf(inner,x-1,'num');
 }
-// Mise en page en entrées « OBJET + NOMBRE », comme les comptes proto-élamites : un à trois signes
-// (le bit faible d'un signe annonce le suivant), puis un octet écrit en nombre. Le système (décimal ou
-// sexagésimal) dépend du premier signe. Purement visuel et déterministe ; le déchiffrement lit le texte.
+// Signe composé (comme M327+M342) : deux signes réduits, accolés dans une même case.
+const compound=(a,b)=>svgOf(`<g transform="translate(0 6) scale(.8)">${sign(a)}</g><g transform="translate(30 6) scale(.8)">${sign(b)}</g>`,62,'num');
+const SIGNE_TOTAL=0x07;  // triangle hachuré encadré : marque les totaux du revers
+// En-tête (2 octets, sans nombre), entrées « 1 à 3 signes + nombre » (le bit faible d'un signe annonce
+// le suivant ; les bits 1–2 du premier choisissent le système, la capacité étant la plus fréquente
+// comme sur MDP 17), puis, au revers, le total de chaque système employé.
 function signsOf(n){
   const b=[];for(let i=0;i+1<n.length;i+=2)b.push(n[i]<<4|n[i+1]);
-  let h='',i=0;
+  if(!b.length)return '';
+  const head=b[0]&1&&b.length>1?compound(b[0],b[1]):b.slice(0,2).map(svg).join('');
+  let h=`<span class="entry tete">${head}</span><span class="br"></span>`,i=2;
+  const tot={C:0,D:0,S:0};
   while(i<b.length){
     const objs=[b[i++]];
     while(i<b.length&&objs.length<3&&(objs[objs.length-1]&1))objs.push(b[i++]);
-    const num=i<b.length?numeral(b[i++],!!(objs[0]&2)):'';
+    const sys=['C','D','S','C'][objs[0]>>1&3];
+    let num='';
+    if(i<b.length){const v=b[i++];tot[sys]+=v;num=numeral(v,sys)}
     h+=`<span class="entry">${objs.map(svg).join('')}${num}</span>`;
   }
+  h+='<span class="br revers" title="revers"></span>';
+  for(const k of ['C','D','S'])if(tot[k])h+=`<span class="entry total">${svg(SIGNE_TOTAL)}${numeral(tot[k],k)}</span>`;
   return h;
 }
 const $=id=>document.getElementById(id);
